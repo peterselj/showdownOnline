@@ -10,6 +10,8 @@
   --red: #a2242d;
   --card-w: 62px;
   --card-h: 87px;
+  --big-w: clamp(96px, 13vh, 150px);
+  --big-h: calc(var(--big-w) * 1.4);
 }
 
 body {
@@ -163,3 +165,17 @@ body {
 #zoom img { max-height: 92vh; max-width: 92vw; border-radius: 12px; }
 
 #add-player-btn { margin-left: auto; align-self: center; }
+
+/* ---------- big pitcher / batter zones ---------- */
+.field-zone.big .zone { min-width: calc(var(--big-w) + 8px); min-height: calc(var(--big-h) + 8px); }
+.field-zone.big .card { width: var(--big-w); height: var(--big-h); }
+.field-zone.big .card .card-name { font-size: 11px; padding: 2px; }
+
+/* ---------- hover magnifier ---------- */
+#peek {
+  position: fixed; z-index: 60; pointer-events: none;
+}
+#peek img {
+  width: min(340px, 38vw); border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.75);
+}

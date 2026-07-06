@@ -119,8 +119,10 @@ function render(state) {
 function makeCardEl(card) {
   const el = document.createElement("div");
   el.className = "card " + (card.side === mySide ? "my-card" : "opp-card");
-  // On the shared field, flip the opponent's cards to face them
-  if (card.zone.startsWith("field-") && card.side !== mySide) el.classList.add("flipped");
+  // On the shared field, flip the opponent's base runners to face them —
+  // but the pitcher and batter always face the viewer for legibility.
+  const alwaysUpright = card.zone === "field-mound" || card.zone === "field-batter";
+  if (card.zone.startsWith("field-") && card.side !== mySide && !alwaysUpright) el.classList.add("flipped");
   el.style.backgroundImage = `url("${card.imgUrl}")`;
   el.draggable = true;
   el.dataset.id = card.id;
@@ -128,14 +130,40 @@ function makeCardEl(card) {
   el.addEventListener("dragstart", (e) => {
     e.dataTransfer.setData("text/plain", card.id);
     el.classList.add("dragging");
+    hidePeek();
   });
   el.addEventListener("dragend", () => el.classList.remove("dragging"));
   el.addEventListener("dblclick", () => {
     $("zoom-img").src = card.imgUrl;
     $("zoom").classList.remove("hidden");
   });
+  // hover / press-and-hold magnifier
+  el.addEventListener("mouseenter", () => showPeek(el, card.imgUrl));
+  el.addEventListener("mouseleave", hidePeek);
+  el.addEventListener("pointerdown", () => showPeek(el, card.imgUrl));
+  el.addEventListener("pointerup", hidePeek);
   return el;
 }
+
+// ---------------------------------------------------------------------------
+// Hover magnifier
+// ---------------------------------------------------------------------------
+function showPeek(cardEl, imgUrl) {
+  const peek = $("peek");
+  $("peek-img").src = imgUrl;
+  peek.classList.remove("hidden");
+  const r = cardEl.getBoundingClientRect();
+  const pw = Math.min(340, window.innerWidth * 0.38);
+  const ph = pw * 1.4;
+  // prefer to the right of the card; flip left if it would overflow
+  let x = r.right + 12;
+  if (x + pw > window.innerWidth - 8) x = r.left - pw - 12;
+  let y = Math.min(Math.max(8, r.top + r.height / 2 - ph / 2), window.innerHeight - ph - 8);
+  peek.style.left = Math.max(8, x) + "px";
+  peek.style.top = y + "px";
+}
+
+function hidePeek() { $("peek").classList.add("hidden"); }
 
 // ---------------------------------------------------------------------------
 // Dice
