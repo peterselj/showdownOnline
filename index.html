@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLB Showdown</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ LOBBY ============ -->
+<div id="lobby" class="overlay">
+  <div class="lobby-card">
+    <h1>⚾ MLB Showdown</h1>
+    <p class="lobby-sub">Shared virtual tabletop</p>
+    <label>Room code
+      <input id="room-input" maxlength="12" placeholder="e.g. BROS" autocomplete="off">
+    </label>
+    <label>Your name
+      <input id="name-input" maxlength="20" placeholder="Peter" autocomplete="off">
+    </label>
+    <div class="lobby-sides">
+      <button id="join-home" class="btn btn-home">Join as HOME</button>
+      <button id="join-away" class="btn btn-away">Join as AWAY</button>
+    </div>
+    <p id="lobby-status" class="lobby-status"></p>
+  </div>
+</div>
+
+<!-- ============ GAME ============ -->
+<div id="game" class="hidden">
+
+  <!-- opponent panel (rendered upside down) -->
+  <div id="opp-panel" class="team-panel opp">
+    <div class="panel-inner mirrored">
+      <div class="zone-row" id="opp-lineup"></div>
+      <div class="zone-row small">
+        <div class="labeled-zone"><span class="zone-label">Bench</span><div class="zone multi" data-zone="" id="opp-bench"></div></div>
+        <div class="labeled-zone"><span class="zone-label">Bullpen</span><div class="zone multi" data-zone="" id="opp-bullpen"></div></div>
+      </div>
+    </div>
+    <div class="panel-title" id="opp-title">Opponent</div>
+  </div>
+
+  <!-- center: scoreboard + field -->
+  <div id="center">
+    <div id="scoreboard">
+      <div class="sb-team">
+        <span class="sb-name" id="sb-away-name">AWAY</span>
+        <button class="ctr-btn" data-ctr="away-runs" data-d="-1">−</button>
+        <span class="sb-num" id="sb-away-runs">0</span>
+        <button class="ctr-btn" data-ctr="away-runs" data-d="1">+</button>
+      </div>
+      <div class="sb-mid">
+        <div class="sb-inning">
+          <button class="ctr-btn" data-ctr="inning" data-d="-1">−</button>
+          <span id="sb-inning">▲ 1</span>
+          <button class="ctr-btn" data-ctr="inning" data-d="1">+</button>
+        </div>
+        <div class="sb-outs" id="sb-outs" title="Click to add an out">
+          <span class="out-dot"></span><span class="out-dot"></span><span class="out-dot"></span>
+          <span class="outs-label">OUTS</span>
+        </div>
+      </div>
+      <div class="sb-team">
+        <span class="sb-name" id="sb-home-name">HOME</span>
+        <button class="ctr-btn" data-ctr="home-runs" data-d="-1">−</button>
+        <span class="sb-num" id="sb-home-runs">0</span>
+        <button class="ctr-btn" data-ctr="home-runs" data-d="1">+</button>
+      </div>
+    </div>
+
+    <div id="field">
+      <svg id="diamond" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polygon points="50,88 88,50 50,12 12,50" class="infield-dirt"/>
+        <polygon points="50,80 80,50 50,20 20,50" class="infield-grass"/>
+        <rect x="47.5" y="85.5" width="5" height="5" transform="rotate(45 50 88)" class="base"/>
+      </svg>
+      <div class="field-zone" id="z-second" style="left:50%;top:14%"><div class="zone" data-zone="field-2B"></div><span class="fz-label">2B</span></div>
+      <div class="field-zone" id="z-third"  style="left:13%;top:50%"><div class="zone" data-zone="field-3B"></div><span class="fz-label">3B</span></div>
+      <div class="field-zone" id="z-first"  style="left:87%;top:50%"><div class="zone" data-zone="field-1B"></div><span class="fz-label">1B</span></div>
+      <div class="field-zone" id="z-mound"  style="left:50%;top:47%"><div class="zone" data-zone="field-mound"></div><span class="fz-label">MOUND</span></div>
+      <div class="field-zone" id="z-batter" style="left:50%;top:86%"><div class="zone" data-zone="field-batter"></div><span class="fz-label">AT BAT</span></div>
+
+      <!-- dice -->
+      <div id="dice-area">
+        <div id="die" class="idle">20</div>
+        <button id="roll-btn" class="btn">Roll d20</button>
+        <div id="roll-info"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- my panel -->
+  <div id="my-panel" class="team-panel mine">
+    <div class="panel-title" id="my-title">Me</div>
+    <div class="panel-inner">
+      <div class="zone-row" id="my-lineup"></div>
+      <div class="zone-row small">
+        <div class="labeled-zone"><span class="zone-label">Bench</span><div class="zone multi" id="my-bench"></div></div>
+        <div class="labeled-zone"><span class="zone-label">Bullpen</span><div class="zone multi" id="my-bullpen"></div></div>
+        <button id="add-player-btn" class="btn">+ Add player</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD PLAYER MODAL ============ -->
+<div id="add-modal" class="overlay hidden">
+  <div class="lobby-card">
+    <h2>Add player from Showdown Bot</h2>
+    <label>Player name <input id="ap-name" placeholder="Pedro Martinez"></label>
+    <label>Season year <input id="ap-year" placeholder="1999" maxlength="9"></label>
+    <label>Card set
+      <select id="ap-set"><option>2004</option><option>2005</option></select>
+    </label>
+    <div class="lobby-sides">
+      <button id="ap-go" class="btn btn-home">Build card</button>
+      <button id="ap-cancel" class="btn">Cancel</button>
+    </div>
+    <p id="ap-status" class="lobby-status"></p>
+  </div>
+</div>
+
+<!-- ============ CARD ZOOM ============ -->
+<div id="zoom" class="overlay hidden"><img id="zoom-img" alt="card"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
