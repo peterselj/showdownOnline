@@ -22,9 +22,24 @@ The page is static, so realtime sync uses Firebase's free tier:
 Without Firebase config the app runs in **local mode** (syncs between two tabs
 on the same machine only — handy for testing).
 
-> Test-mode database rules expire after 30 days. When that happens, set rules to
-> `{ "rules": { ".read": true, ".write": true } }` (fine for a private game with
-> an unguessable room code).
+6. **Realtime Database → Rules** → replace the test-mode rules with the contents
+   of [`database.rules.json`](database.rules.json) → **Publish**. Test-mode rules
+   expire 30 days after you create the database and everything stops syncing, so
+   do this before then.
+
+### Security model
+
+The game has no login, so **the room code is the password**. The rules in
+[`database.rules.json`](database.rules.json) accept reads and writes only under
+`/rooms/<code>` where the code is 6–12 characters. That means:
+
+- Nobody can list your rooms or read/write the database root, so rooms can't be
+  discovered by scanning — a code has to be guessed exactly.
+- Every field is shape- and size-checked (runs ≤ 200, outs ≤ 3, a d20 roll is
+  1–20, names ≤ 20 chars, image URLs ≤ 500 chars), so the database can't be
+  turned into someone's free file host.
+- Anyone who *does* have your code can change your game. Pick something
+  unguessable, not `SHOWDOWN`.
 
 ## Playing
 

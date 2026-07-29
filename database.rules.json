@@ -1,0 +1,56 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      "$room": {
+        ".read":  "$room.length >= 6 && $room.length <= 12",
+        ".write": "$room.length >= 6 && $room.length <= 12",
+
+        "players": {
+          "home": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "away": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "$other": { ".validate": false }
+        },
+
+        "counters": {
+          "homeRuns": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200" },
+          "awayRuns": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200" },
+          "outs":     { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
+          "inning":   { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 50" },
+          "half":     { ".validate": "newData.val() === 'top' || newData.val() === 'bottom'" },
+          "$other": { ".validate": false }
+        },
+
+        "dice": {
+          "value":  { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20" },
+          "roller": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "rollId": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        },
+
+        "cards": {
+          "$cardId": {
+            ".validate": "$cardId.length <= 40",
+            "id":        { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "side":      { ".validate": "newData.val() === 'home' || newData.val() === 'away'" },
+            "zone":      { ".validate": "newData.isString() && newData.val().length <= 30" },
+            "ord":       { ".validate": "newData.isNumber()" },
+            "name":      { ".validate": "newData.isString() && newData.val().length <= 60" },
+            "year":      { ".validate": "newData.isString() && newData.val().length <= 12" },
+            "set":       { ".validate": "newData.isString() && newData.val().length <= 12" },
+            "points":    { ".validate": "newData.isNumber() || (newData.isString() && newData.val().length <= 12)" },
+            "command":   { ".validate": "newData.isNumber() || (newData.isString() && newData.val().length <= 12)" },
+            "outs":      { ".validate": "newData.isNumber() || (newData.isString() && newData.val().length <= 12)" },
+            "isPitcher": { ".validate": "newData.isBoolean()" },
+            "imgUrl":    { ".validate": "newData.isString() && newData.val().length <= 500" },
+            "$other":    { ".validate": "!newData.hasChildren() && (!newData.isString() || newData.val().length <= 200)" }
+          }
+        },
+
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
