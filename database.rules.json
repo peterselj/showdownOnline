@@ -5,8 +5,8 @@
 
     "rooms": {
       "$room": {
-        ".read":  "$room.length >= 6 && $room.length <= 12",
-        ".write": "$room.length >= 6 && $room.length <= 12",
+        ".read":  "$room.length <= 24",
+        ".write": "$room.length <= 24",
 
         "players": {
           "home": { ".validate": "newData.isString() && newData.val().length <= 20" },

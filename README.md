@@ -31,19 +31,20 @@ on the same machine only — handy for testing).
 
 The game has no login, so **the room code is the password**. The rules in
 [`database.rules.json`](database.rules.json) accept reads and writes only under
-`/rooms/<code>` where the code is 6–12 characters. That means:
+`/rooms/<code>`, any length. That means:
 
-- Nobody can list your rooms or read/write the database root, so rooms can't be
-  discovered by scanning — a code has to be guessed exactly.
+- Nobody can read or write the database root, so rooms can't be listed — a code
+  has to be guessed exactly.
 - Every field is shape- and size-checked (runs ≤ 200, outs ≤ 3, a d20 roll is
   1–20, names ≤ 20 chars, image URLs ≤ 500 chars), so the database can't be
   turned into someone's free file host.
-- Anyone who *does* have your code can change your game. Pick something
-  unguessable, not `SHOWDOWN`.
+- Anyone who has your code can change your game, and short codes like `BROS` are
+  guessable by brute force. Deliberate trade-off for a two-person game — if it
+  ever matters, use a longer code.
 
 ## Playing
 
-1. Both visit the page, enter the **same room code**, one joins as HOME, the other as AWAY.
+1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), one joins as HOME, the other as AWAY.
 2. **+ Add player** → name + year (e.g. `Pedro Martinez` / `1999`) → card is built from Showdown Bot (image takes ~30s).
 3. Drag cards: lineup slots #1–9, bench, bullpen, and on the field: AT BAT, 1B, 2B, 3B, MOUND.
 4. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).

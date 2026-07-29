@@ -30,12 +30,6 @@ function join(side) {
   const room = $("room-input").value.trim().toUpperCase();
   myName = $("name-input").value.trim() || (side === "home" ? "Home" : "Away");
   if (!room) { $("lobby-status").textContent = "Enter a room code first."; return; }
-  // The room code is the only thing protecting the game state, so the
-  // database rules reject anything shorter than 6 characters.
-  if (room.length < 6) {
-    $("lobby-status").textContent = "Room code must be at least 6 characters.";
-    return;
-  }
 
   mySide = side;
   oppSide = side === "home" ? "away" : "home";
