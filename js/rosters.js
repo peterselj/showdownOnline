@@ -115,15 +115,18 @@ const RosterBuilder = (() => {
   const queue = [];
   let building = false;
 
-  function enqueueBuild(name, year, set) {
+  // repair: rebuild a library card whose image has expired (don't add it to the roster)
+  function enqueueBuild(name, year, set, repair = false) {
     const existing = Library.find(name, year, set);
-    if (existing) {
-      queue.push({ name, year, set, status: "done", msg: `${existing.name} ${existing.year} is already in your library` });
+    if (existing && !repair) {
+      const job = { name, year, set, status: "done", msg: `${existing.name} ${existing.year} is already in your library` };
+      queue.push(job);
+      fadeOut(job);
       renderQueue();
       return;
     }
     if (queue.some((j) => cardKey(j.name, j.year, j.set) === cardKey(name, year, set) && j.status !== "done" && j.status !== "error")) return;
-    queue.push({ name, year, set, status: "queued", msg: "Waiting…" });
+    queue.push({ name, year, set, repair, status: "queued", msg: "Waiting…" });
     renderQueue();
     pump();
   }
@@ -140,7 +143,8 @@ const RosterBuilder = (() => {
       Library.put(card);
       job.status = "done";
       job.msg = `${card.name} ${card.year} — ${card.points} pts`;
-      if (current()) edit((r) => rosterQuickAdd(r, card)); else renderLibrary();
+      fadeOut(job);
+      if (current() && !job.repair) edit((r) => rosterQuickAdd(r, card)); else renderAll();
     } catch (err) {
       job.status = "error";
       job.msg = err.message;
@@ -148,6 +152,14 @@ const RosterBuilder = (() => {
     building = false;
     renderQueue();
     pump();
+  }
+
+  // Finished builds clear themselves after a few seconds; failures stay until dismissed.
+  function fadeOut(job) {
+    setTimeout(() => {
+      const i = queue.indexOf(job);
+      if (i >= 0) { queue.splice(i, 1); renderQueue(); }
+    }, 8000);
   }
 
   function renderQueue() {
@@ -320,6 +332,13 @@ const RosterBuilder = (() => {
     $("lib-count").textContent = total
       ? `${cards.length} of ${total} cards${r ? " · drag onto the roster or press +" : ""}`
       : "Your library is empty. Build a card above — it's saved in this browser.";
+
+    // Cards built before the card server have Showdown Bot image links, which expire.
+    const stale = Object.values(lib).filter((c) => !String(c.imgUrl).startsWith(window.CARD_SERVER));
+    const repair = $("lib-repair");
+    repair.classList.toggle("hidden", !stale.length);
+    repair.textContent = `Repair ${stale.length} expired card image${stale.length === 1 ? "" : "s"}`;
+    repair.onclick = () => stale.forEach((c) => enqueueBuild(c.name, c.year, c.set, true));
 
     const grid = $("lib-grid");
     grid.innerHTML = "";

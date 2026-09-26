@@ -232,7 +232,7 @@ body {
 #lb-name, #lib-search { flex: 1 1 auto; }
 #lb-year { width: 62px; }
 
-.build-queue { list-style: none; font-size: 12px; }
+.build-queue { list-style: none; font-size: 12px; max-height: 140px; overflow-y: auto; flex: 0 0 auto; }
 .build-queue li { display: flex; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 4px; margin-bottom: 3px; background: #0003; }
 .bq-name { font-weight: bold; white-space: nowrap; }
 .bq-msg { flex: 1; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -242,6 +242,7 @@ body {
 .bq-x { background: none; border: none; color: inherit; cursor: pointer; font-size: 15px; }
 
 .lib-count { font-size: 11px; opacity: .75; margin: 2px 0 6px; }
+.lib-repair { background: #e8c860; margin: 2px 0 4px; align-self: flex-start; }
 .lib-grid { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px; }
 .lib-tile {
   display: flex; gap: 8px; align-items: center; background: #0003; border-radius: 6px; padding: 4px;
@@ -341,9 +342,13 @@ body {
 .chk-error .chk-icon { background: #ff5a5f; }
 .chk-ok { opacity: .8; }
 
-@media (max-width: 1150px) {
-  .rb-cols { grid-template-columns: 1fr 1fr; }
+@media (max-width: 1250px) {
+  .rb-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .rb-cols > .rb-section:last-child { grid-column: 1 / -1; order: -1; }
+}
+@media (max-width: 1000px) {
+  .rb-library { flex-basis: 300px; }
+  .rb-cols { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
   .rb { flex-direction: column; align-items: stretch; padding: 8px; }

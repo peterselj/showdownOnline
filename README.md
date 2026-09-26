@@ -5,9 +5,9 @@ MLB Showdown table: batting lineups, bench, bullpen, bases, mound, a d20 with
 animation, and outs/runs/inning counters. "Dumb tabletop" style — you apply
 the game rules, the page keeps the shared state.
 
-Player cards are generated live from [Showdown Bot](https://www.showdownbot.com)
-in the 2004/2005 design: type a name + season year and the card appears in
-your bench/bullpen.
+Player cards are generated from [Showdown Bot](https://www.showdownbot.com)
+in the 2004/2005 design (through our [card server](#card-server)): type a name +
+season year and the card is built into your library.
 
 ## Setup (one time, ~5 minutes)
 
@@ -41,6 +41,27 @@ The game has no login, so **the room code is the password**. The rules in
 - Anyone who has your code can change your game, and short codes like `BROS` are
   guessable by brute force. Deliberate trade-off for a two-person game — if it
   ever matters, use a longer code.
+
+### Card server
+
+Showdown Bot's API can't be called straight from a browser, and it deletes the
+card images it generates after a few minutes. So cards are built through a
+small Cloudflare Worker in [`worker/`](worker/) (free tier, deployed at
+`https://showdown.mlbshowdown.workers.dev`; `window.CARD_SERVER` in
+[`js/config.js`](js/config.js) points at it). It:
+
+- calls Showdown Bot on the page's behalf, with retries;
+- stores a shrunken (~100 KB) copy of every card image permanently and serves it
+  at `/img/<card>`;
+- caches every finished card, so a card built once comes back instantly for
+  either player;
+- only accepts requests from `https://peterselj.github.io` and localhost, and
+  only stores images for cards it built itself (signed tokens).
+
+To change it: edit `worker/src/index.js`, then `cd worker && npx wrangler deploy`
+(signed in to the Cloudflare account that owns `mlbshowdown.workers.dev`). To
+test locally, run `npx wrangler dev` in `worker/` and open the page with
+`?cardserver=http://127.0.0.1:8787`.
 
 ## Building rosters
 
