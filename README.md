@@ -7,7 +7,7 @@ the game rules, the page keeps the shared state.
 
 Player cards are generated from [Showdown Bot](https://www.showdownbot.com)
 in the 2004/2005 design (through our [card server](#card-server)): type a name +
-season year and the card appears in your bench/bullpen.
+season year and the card is built into your library.
 
 ## Setup (one time, ~5 minutes)
 
@@ -63,15 +63,50 @@ To change it: edit `worker/src/index.js`, then `cd worker && npx wrangler deploy
 test locally, run `npx wrangler dev` in `worker/` and open the page with
 `?cardserver=http://127.0.0.1:8787`.
 
+## Building rosters
+
+The **Rosters** tab is your personal deck-building area:
+
+- **Card library:** type a name + season year (e.g. `Pedro Martinez` / `1999`) and
+  press **Build**. The card is built on Showdown Bot (~10s, instant if already built) and
+  saved in your library, so you only build each card once. Builds queue up and
+  run in the background.
+- **Rosters:** up to 5 saved rosters. Drag cards (or press **+**) into the batting
+  order, bench, rotation, and bullpen; pick each hitter's position.
+- **Roster check:** the live checklist enforces the team rules: exactly 20
+  players, all 9 positions covered, 4–5 starting pitchers, no player twice. The
+  budget bar tracks points against 5,000 (bench players count at full value);
+  going over or under, and out-of-position players, are warnings only. The rules live in `RULES` in
+  [`js/store.js`](js/store.js) if you play house rules.
+
+Library and rosters are saved in **this browser only** (localStorage). Clearing
+site data or switching computers starts you fresh.
+
+## Running locally
+
+Don't open `index.html` by double-clicking it: a page opened as a file can't
+build cards (the card server only accepts the live site and `localhost`).
+Instead, on Windows double-click **`serve.bat`**, which serves the folder at
+<http://localhost:8000> and opens it. Anywhere else:
+
+```bash
+python -m http.server 8000
+```
+
+then open <http://localhost:8000>.
+
 ## Playing
 
-1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), one joins as HOME, the other as AWAY.
-2. **+ Add player** → name + year (e.g. `Pedro Martinez` / `1999`) → card is built from Showdown Bot (image takes ~30s).
-3. Drag cards: lineup slots #1–9, bench, bullpen, and on the field: AT BAT, 1B, 2B, 3B, MOUND.
-4. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).
-5. **Roll d20** — both players see the same animated roll.
-6. Click the out dots to add outs; +/− buttons for runs and half-innings.
-7. Double-click any card to zoom it.
+1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), pick a
+   roster to bring, and one joins as HOME, the other as AWAY. Your roster is dealt
+   onto the table: lineup #1–9 with positions, bench, rotation, bullpen.
+   **Load roster** swaps in a different one mid-session; **+ Add player** still
+   works for one-off additions.
+2. Drag cards to adjust between games: lineup slots #1–9, bench, rotation, bullpen, and on the field: AT BAT, 1B, 2B, 3B, MOUND.
+3. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).
+4. **Roll d20** — both players see the same animated roll.
+5. Click the out dots to add outs; +/− buttons for runs and half-innings.
+6. Double-click any card to zoom it.
 
 Team state lives in the Firebase room, so it persists between sessions as long
 as you reuse the same room code.

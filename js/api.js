@@ -5,6 +5,9 @@
 const IMG_MAX_WIDTH = 700;
 
 async function cardServer(path, opts = {}) {
+  if (location.protocol === "file:") {
+    throw new Error("Cards can't be built from a page opened as a file. Run a local server (see README → Running locally) or use the live site.");
+  }
   let res;
   try {
     res = await fetch(window.CARD_SERVER + path, opts);
@@ -30,9 +33,9 @@ async function shrinkImage(blob) {
   return webp && webp.type === "image/webp" ? webp : encode("image/jpeg", 0.85);
 }
 
-// Build (or fetch the already-built) card. Returns {name, year, set, points,
-// command, outs, isPitcher, imgUrl} — flat fields only, as the room's
-// database rules require.
+// Build (or fetch the already-built) card. Returns a library card:
+// {id, name, year, set, points, command, outs, isPitcher, role, positions,
+//  ip, speed, hand, team, imgUrl, builtAt}.
 // onStatus(msg) is called with progress updates (a new card takes ~30s).
 async function buildPlayerCard(name, year, set, onStatus) {
   onStatus("Building card on Showdown Bot (can take ~30s)…");
@@ -55,12 +58,8 @@ async function buildPlayerCard(name, year, set, onStatus) {
       body: small,
     })).card;
   }
-
-  const out = {};
-  for (const k of ["name", "year", "set", "points", "command", "outs", "isPitcher", "imgUrl"]) {
-    if (card[k] !== undefined && card[k] !== null) out[k] = card[k];
-  }
-  return out;
+  const { slug, ...rest } = card;
+  return { ...rest, id: cardKey(card.name, card.year, card.set), builtAt: Date.now() };
 }
 
 window.buildPlayerCard = buildPlayerCard;

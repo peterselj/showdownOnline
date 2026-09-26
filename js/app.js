@@ -1,4 +1,4 @@
-// MLB Showdown virtual tabletop — main UI logic.
+// MLB Showdown virtual tabletop — tab router and the Play tab.
 // "Dumb tabletop" model: the app syncs cards, zones, dice, and counters;
 // the players apply the game rules themselves.
 
@@ -7,26 +7,80 @@ let mySide = null;   // "home" | "away"
 let oppSide = null;
 let myName = "";
 
-const $ = (id) => document.getElementById(id);
+// ---------------------------------------------------------------------------
+// Tabs: #/play[?room=X&side=home], #/rosters, #/strategy.
+// Old links of the form #room=X&side=home still open the Play tab.
+// ---------------------------------------------------------------------------
+function currentTab() {
+  const h = location.hash;
+  if (h.startsWith("#/rosters")) return "rosters";
+  if (h.startsWith("#/strategy")) return "strategy";
+  return "play";
+}
+
+function playParams() {
+  return new URLSearchParams(location.hash.replace(/^#\/?(play)?\??/, ""));
+}
+
+function route() {
+  const tab = currentTab();
+  for (const t of ["play", "rosters", "strategy"]) $(`page-${t}`).classList.toggle("hidden", t !== tab);
+  document.querySelectorAll("#tabs .tab").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
+  hidePeek();
+  if (tab === "rosters") RosterBuilder.show();
+  if (tab === "play" && !sync) refreshRosterSelect();
+}
 
 // ---------------------------------------------------------------------------
 // Lobby
 // ---------------------------------------------------------------------------
+const LS_LAST_ROSTER = "showdown-last-roster";
+
 function initLobby() {
-  const params = new URLSearchParams(location.hash.slice(1));
+  const params = playParams();
   if (params.get("room")) $("room-input").value = params.get("room");
   if (localStorage.getItem("showdown-name")) $("name-input").value = localStorage.getItem("showdown-name");
 
-  $("join-home").onclick = () => join("home");
-  $("join-away").onclick = () => join("away");
+  $("join-home").onclick = () => join("home", $("roster-select").value);
+  $("join-away").onclick = () => join("away", $("roster-select").value);
+  $("roster-select").onchange = updateRosterHint;
 
+  // Rejoining from a link keeps whatever is already on the table.
   if (params.get("room") && params.get("side")) {
     $("name-input").value = params.get("name") || $("name-input").value;
-    join(params.get("side"));
+    join(params.get("side"), "");
   }
 }
 
-function join(side) {
+function rosterOptionsHTML() {
+  const lib = Library.all();
+  return Rosters.all().map((r) => {
+    const pts = rosterPoints(r, lib).total.toLocaleString();
+    const mark = rosterIsLegal(r, lib) ? "✓" : "⚠";
+    return `<option value="${esc(r.id)}">${mark} ${esc(r.name)} — ${pts} pts</option>`;
+  }).join("");
+}
+
+function refreshRosterSelect() {
+  const sel = $("roster-select");
+  sel.innerHTML = `<option value="">— Empty table (add players at the table) —</option>` + rosterOptionsHTML();
+  const last = localStorage.getItem(LS_LAST_ROSTER);
+  if (last && Rosters.get(last)) sel.value = last;
+  updateRosterHint();
+}
+
+function updateRosterHint() {
+  const r = Rosters.get($("roster-select").value);
+  const hint = $("roster-hint");
+  if (!Rosters.all().length) { hint.innerHTML = `No saved rosters yet — <a href="#/rosters">build one</a>.`; return; }
+  if (!r) { hint.textContent = ""; return; }
+  const errors = validateRoster(r).filter((c) => c.level === "error");
+  hint.innerHTML = errors.length
+    ? `⚠ Not a legal roster yet: ${esc(errors[0].msg)}${errors.length > 1 ? ` (+${errors.length - 1} more)` : ""}. You can still bring it.`
+    : "✓ Legal roster";
+}
+
+function join(side, rosterId) {
   const room = $("room-input").value.trim().toUpperCase();
   myName = $("name-input").value.trim() || (side === "home" ? "Home" : "Away");
   if (!room) { $("lobby-status").textContent = "Enter a room code first."; return; }
@@ -34,11 +88,23 @@ function join(side) {
   mySide = side;
   oppSide = side === "home" ? "away" : "home";
   localStorage.setItem("showdown-name", myName);
-  location.hash = `room=${room}&side=${side}`;
+  location.hash = `#/play?room=${encodeURIComponent(room)}&side=${side}`;
+  document.querySelector('#tabs .tab[data-tab="play"]').href = location.hash;
 
   sync = createSync(room);
   sync.onChange(render);
   sync.update({ [`players/${side}`]: myName });
+
+  const roster = rosterId && Rosters.get(rosterId);
+  if (roster) {
+    localStorage.setItem(LS_LAST_ROSTER, roster.id);
+    sync.loaded.then(() => {
+      const mine = Object.values(sync.state.cards).filter((c) => c.side === mySide);
+      if (!mine.length || confirm(`You already have ${mine.length} cards on this table. Replace them with "${roster.name}"?`)) {
+        loadRosterToTable(roster);
+      }
+    });
+  }
 
   $("lobby").classList.add("hidden");
   $("game").classList.remove("hidden");
@@ -52,7 +118,7 @@ function join(side) {
 // ---------------------------------------------------------------------------
 // Zones
 // ---------------------------------------------------------------------------
-// Zone ids: "<side>-lineup-1..9", "<side>-bench", "<side>-bullpen",
+// Zone ids: "<side>-lineup-1..9", "<side>-bench", "<side>-rotation", "<side>-bullpen",
 // "field-1B" | "field-2B" | "field-3B" | "field-mound" | "field-batter"
 
 function buildLineupSlots() {
@@ -71,9 +137,10 @@ function buildLineupSlots() {
       row.appendChild(slot);
     }
     $(`${who}-bench`).dataset.zone = `${side}-bench`;
+    $(`${who}-rotation`).dataset.zone = `${side}-rotation`;
     $(`${who}-bullpen`).dataset.zone = `${side}-bullpen`;
   }
-  document.querySelectorAll(".zone").forEach(wireDropZone);
+  document.querySelectorAll("#game .zone").forEach(wireDropZone);
 }
 
 function wireDropZone(zoneEl) {
@@ -105,10 +172,10 @@ function render(state) {
   document.querySelectorAll("#sb-outs .out-dot").forEach((d, i) => d.classList.toggle("lit", i < c.outs));
 
   // cards
-  document.querySelectorAll(".zone").forEach((z) => { z.querySelectorAll(".card").forEach((el) => el.remove()); });
+  document.querySelectorAll("#game .zone").forEach((z) => { z.querySelectorAll(".card").forEach((el) => el.remove()); });
   const cards = Object.values(state.cards || {}).sort((a, b) => (a.ord || 0) - (b.ord || 0));
   for (const card of cards) {
-    const zoneEl = document.querySelector(`.zone[data-zone="${card.zone}"]`);
+    const zoneEl = document.querySelector(`#game .zone[data-zone="${card.zone}"]`);
     if (!zoneEl) continue;
     zoneEl.appendChild(makeCardEl(card));
   }
@@ -126,17 +193,15 @@ function makeCardEl(card) {
   el.style.backgroundImage = `url("${card.imgUrl}")`;
   el.draggable = true;
   el.dataset.id = card.id;
-  el.innerHTML = `<span class="card-name">${card.name}</span>`;
+  el.innerHTML = `<span class="card-name">${esc(card.name)}</span>`
+    + (card.pos && card.zone.includes("-lineup-") ? `<span class="card-pos">${esc(card.pos)}</span>` : "");
   el.addEventListener("dragstart", (e) => {
     e.dataTransfer.setData("text/plain", card.id);
     el.classList.add("dragging");
     hidePeek();
   });
   el.addEventListener("dragend", () => el.classList.remove("dragging"));
-  el.addEventListener("dblclick", () => {
-    $("zoom-img").src = card.imgUrl;
-    $("zoom").classList.remove("hidden");
-  });
+  el.addEventListener("dblclick", () => showZoom(card.imgUrl));
   // hover / press-and-hold magnifier
   el.addEventListener("mouseenter", () => showPeek(el, card.imgUrl));
   el.addEventListener("mouseleave", hidePeek);
@@ -144,26 +209,6 @@ function makeCardEl(card) {
   el.addEventListener("pointerup", hidePeek);
   return el;
 }
-
-// ---------------------------------------------------------------------------
-// Hover magnifier
-// ---------------------------------------------------------------------------
-function showPeek(cardEl, imgUrl) {
-  const peek = $("peek");
-  $("peek-img").src = imgUrl;
-  peek.classList.remove("hidden");
-  const r = cardEl.getBoundingClientRect();
-  const pw = Math.min(340, window.innerWidth * 0.38);
-  const ph = pw * 1.4;
-  // prefer to the right of the card; flip left if it would overflow
-  let x = r.right + 12;
-  if (x + pw > window.innerWidth - 8) x = r.left - pw - 12;
-  let y = Math.min(Math.max(8, r.top + r.height / 2 - ph / 2), window.innerHeight - ph - 8);
-  peek.style.left = Math.max(8, x) + "px";
-  peek.style.top = y + "px";
-}
-
-function hidePeek() { $("peek").classList.add("hidden"); }
 
 // ---------------------------------------------------------------------------
 // Dice
@@ -220,6 +265,22 @@ function wireGlobalUI() {
 
   $("zoom").onclick = () => $("zoom").classList.add("hidden");
 
+  // load-roster modal
+  $("load-roster-btn").onclick = () => {
+    const opts = rosterOptionsHTML();
+    if (!opts) { if (confirm("You have no saved rosters yet. Go to the Rosters tab?")) location.hash = "#/rosters"; return; }
+    $("lr-select").innerHTML = opts;
+    const last = localStorage.getItem(LS_LAST_ROSTER);
+    if (last && Rosters.get(last)) $("lr-select").value = last;
+    $("load-modal").classList.remove("hidden");
+  };
+  $("lr-cancel").onclick = () => $("load-modal").classList.add("hidden");
+  $("lr-go").onclick = () => {
+    const r = Rosters.get($("lr-select").value);
+    $("load-modal").classList.add("hidden");
+    if (r) { localStorage.setItem(LS_LAST_ROSTER, r.id); loadRosterToTable(r); }
+  };
+
   // add-player modal
   $("add-player-btn").onclick = () => { $("ap-status").textContent = ""; $("add-modal").classList.remove("hidden"); };
   $("ap-cancel").onclick = () => $("add-modal").classList.add("hidden");
@@ -233,10 +294,12 @@ async function addPlayer() {
   if (!name || !year) { $("ap-status").textContent = "Name and year required."; return; }
   $("ap-go").disabled = true;
   try {
-    const card = await buildPlayerCard(name, year, set, (msg) => { $("ap-status").textContent = msg; });
+    const card = Library.find(name, year, set)
+      || await buildPlayerCard(name, year, set, (msg) => { $("ap-status").textContent = msg; });
+    Library.put(card);
     const id = "c" + Date.now();
     sync.update({
-      [`cards/${id}`]: Object.assign(card, {
+      [`cards/${id}`]: tableCard(card, {
         id, side: mySide, ord: Date.now(),
         zone: card.isPitcher ? `${mySide}-bullpen` : `${mySide}-bench`,
       }),
@@ -250,4 +313,42 @@ async function addPlayer() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rosters -> table
+// ---------------------------------------------------------------------------
+// The room only accepts flat fields per card (see database.rules.json), so
+// copy the scalars shown at the table and flatten the positions object.
+function tableCard(card, extra) {
+  const out = { libId: card.id, pos: "", positions: positionLabel(card) };
+  for (const k of ["name", "year", "set", "points", "command", "outs", "isPitcher", "imgUrl", "role", "ip", "speed", "hand", "team"]) {
+    if (card[k] !== undefined && card[k] !== null) out[k] = card[k];
+  }
+  return Object.assign(out, extra);
+}
+
+// Replace all of my cards on the table with a saved roster's cards.
+function loadRosterToTable(roster) {
+  const lib = Library.all();
+  const patch = {};
+  for (const c of Object.values(sync.state.cards)) if (c.side === mySide) patch[`cards/${c.id}`] = null;
+
+  const base = Date.now();
+  let n = 0;
+  const put = (cardId, zone, extra = {}) => {
+    const card = lib[cardId];
+    if (!card) return;
+    const id = `c${base}${n}`;
+    patch[`cards/${id}`] = tableCard(card, Object.assign({ id, side: mySide, zone, ord: base + n }, extra));
+    n++;
+  };
+  roster.lineup.forEach((s, i) => s.cardId && put(s.cardId, `${mySide}-lineup-${i + 1}`, { pos: s.pos || "" }));
+  roster.bench.forEach((id) => put(id, `${mySide}-bench`));
+  roster.rotation.forEach((id) => put(id, `${mySide}-rotation`));
+  roster.bullpen.forEach((id) => put(id, `${mySide}-bullpen`));
+  sync.update(patch);
+  $("roll-info").textContent = `${myName} brought "${roster.name}"`;
+}
+
+window.addEventListener("hashchange", route);
 initLobby();
+route();
