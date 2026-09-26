@@ -52,10 +52,10 @@ The **Rosters** tab is your personal deck-building area:
   run in the background.
 - **Rosters:** up to 5 saved rosters. Drag cards (or press **+**) into the batting
   order, bench, rotation, and bullpen; pick each hitter's position.
-- **Roster check:** the live budget bar and checklist enforce the team rules:
-  exactly 20 players, 5,000 points (bench players count at full value), all 9
-  positions covered, 4–5 starting pitchers, no player twice. Out-of-position
-  players and unspent points are warnings. The rules live in `RULES` in
+- **Roster check:** the live checklist enforces the team rules: exactly 20
+  players, all 9 positions covered, 4–5 starting pitchers, no player twice. The
+  budget bar tracks points against 5,000 (bench players count at full value);
+  going over or under, and out-of-position players, are warnings only. The rules live in `RULES` in
   [`js/store.js`](js/store.js) if you play house rules.
 
 Library and rosters are saved in **this browser only** (localStorage). Clearing

@@ -179,7 +179,7 @@ function rosterCount(r) {
 }
 
 // Returns [{level: "error"|"warn"|"ok", msg}]. A roster is legal when there
-// are no errors; warnings (out of position, unspent points) are advisory.
+// are no errors; warnings (out of position, over or under budget) are advisory.
 function validateRoster(r, lib = Library.all()) {
   const out = [];
   const add = (level, msg) => out.push({ level, msg });
@@ -229,7 +229,9 @@ function validateRoster(r, lib = Library.all()) {
   // budget
   const { total } = rosterPoints(r, lib);
   const cap = RULES.pointCap;
-  if (total > cap) add("error", `${total.toLocaleString()} pts — ${(total - cap).toLocaleString()} over the ${cap.toLocaleString()} cap`);
+  // Over budget is a warning, not an error: card values aren't known until
+  // they're built, so an over-cap roster must still be playable.
+  if (total > cap) add("warn", `${total.toLocaleString()} pts — ${(total - cap).toLocaleString()} over the ${cap.toLocaleString()} cap`);
   else if (total < cap) add("warn", `${(cap - total).toLocaleString()} pts unspent`);
   else add("ok", `Exactly ${cap.toLocaleString()} pts`);
 
