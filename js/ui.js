@@ -42,9 +42,11 @@ function showPeekFace(anchorEl, card) {
   peek.style.top = y + "px";
 }
 
-// A strategy card drawn in HTML, styled after the printed cards:
-// type-colored frame, name, when to play, effect, type + year/set/number.
+// A strategy card: the real scan when we have one (2004-05), otherwise drawn
+// in HTML after the printed layout — type-colored name band, when to play,
+// effect, type footer with year/set/number.
 function strategyFaceHTML(card, size = "") {
+  if (card.img) return `<img class="sface-img ${size}" src="${esc(card.img)}" alt="${esc(card.name)}">`;
   const type = (card.type || "").toLowerCase();
   const text = card.text
     ? esc(card.text)

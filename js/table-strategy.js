@@ -73,8 +73,13 @@ function stratMiniEl(inst, { faceUp, mine }) {
     return el;
   }
   const type = card.type.toLowerCase();
-  el.className = `smini sface-${type} ${inst.side === mySide ? "my-strat" : "opp-strat"}`;
-  el.innerHTML = `<span class="sm-name">${esc(card.name)}</span><span class="sm-year">${esc(yearTag(card))}</span>`;
+  el.className = `smini sface-${type} ${inst.side === mySide ? "my-strat" : "opp-strat"}` + (card.img ? " has-img" : "");
+  if (card.img) {
+    el.style.backgroundImage = `url("${card.img}")`;
+    el.innerHTML = `<span class="card-name">${esc(card.name)}</span>`;
+  } else {
+    el.innerHTML = `<span class="sm-name">${esc(card.name)}</span><span class="sm-year">${esc(yearTag(card))}</span>`;
+  }
   el.addEventListener("mouseenter", () => showPeekFace(el, card));
   el.addEventListener("mouseleave", hidePeek);
   if (mine) {

@@ -198,6 +198,7 @@ const StrategyBuilder = (() => {
       const tile = document.createElement("div");
       tile.className = `cat-tile sface-${c.type.toLowerCase()}` + (inDeck ? " in-roster" : "");
       tile.innerHTML = `
+        ${c.img ? `<img class="ct-thumb" src="${esc(c.img)}" alt="" loading="lazy">` : ""}
         <div class="ct-info">
           <span class="lt-name">${esc(c.name)} <small>${esc(yearTag(c))}</small></span>
           <span class="ct-when">${esc(c.when)}</span>

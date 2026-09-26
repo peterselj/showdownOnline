@@ -14,6 +14,10 @@ Effect text: the site's list omits the effect for many 2000-2002 cards. Those
 are transcribed by hand from the card images into
 data/strategy-text-transcribed.json ({card id: text}), which this script merges
 in and marks with "textSource": "transcribed".
+
+Images: card scans (2004-2005, from Mark0552/ShowdownSim) are matched by
+scripts/import_strategy_images.py into data/strategy-images.json, merged here
+as "img".
 """
 
 import hashlib, html, json, re, subprocess, sys, time
@@ -23,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "scripts" / ".cache"
 OUT = ROOT / "data" / "strategy-cards.json"
 TRANSCRIBED = ROOT / "data" / "strategy-text-transcribed.json"
+IMAGES = ROOT / "data" / "strategy-images.json"   # from import_strategy_images.py
 SITE = "https://showdowncards.com"
 LIST = SITE + "/mlb/mlbsearch.php?a=strategy&limit={offset}&orderby={orderby}&sort={sort}"
 DELAY = 10
@@ -69,6 +74,7 @@ def base_name(name):
 def read_list():
     """The paging is unstable for ties, so union several sort orders."""
     cards = {}
+    found_before = -1
     for orderby in ["name", "cardnumber", "year", "type", "whenplay", "description"]:
         for sort in ["ASC", "DESC"]:
             for offset in range(0, EXPECTED, 25):
@@ -83,8 +89,10 @@ def read_list():
                         "year": clean(tds[4]), "when": clean(tds[5]), "text": clean(tds[6]),
                     }
             print(f"  list by {orderby} {sort}: {len(cards)} unique", file=sys.stderr)
-            if len(cards) >= EXPECTED:
+            # Stop when complete, or when a whole pass turned up nothing new.
+            if len(cards) >= EXPECTED or len(cards) == found_before:
                 return cards
+            found_before = len(cards)
     return cards
 
 
@@ -109,13 +117,15 @@ def main():
     print(f"{len(listed)} listings (site says {EXPECTED})", file=sys.stderr)
 
     transcribed = json.loads(TRANSCRIBED.read_text(encoding="utf-8")) if TRANSCRIBED.exists() else {}
+    images = json.loads(IMAGES.read_text(encoding="utf-8")) if IMAGES.exists() else {}
     cards = []
     for i, (slug, row) in enumerate(sorted(listed.items())):
         if i % 25 == 0:
             print(f"  store pages {i}/{len(listed)}", file=sys.stderr)
         store = read_store_page(slug)
         year = store["setYear"] or ("20" + row["year"].strip("'") if row["year"] else None)
-        text, source = row["text"], "showdowncards.com"
+        # some effects are wrapped in stray quotes on the site
+        text, source = re.sub(r'^"(.*)"$', r"\1", row["text"]), "showdowncards.com"
         if slug in transcribed:
             text, source = transcribed[slug], "transcribed"
         elif not text:
@@ -135,6 +145,7 @@ def main():
             "text": text,
             "textSource": source,
             "starred": row["name"].count("*"),
+            "img": images.get(slug),
         })
 
     cards.sort(key=lambda c: (c["year"] or "", c["set"] or "", c["name"]))
