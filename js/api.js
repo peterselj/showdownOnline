@@ -14,7 +14,7 @@ async function sbPost(path, body) {
   return res.json();
 }
 
-// Build a card and its image. Returns {name, year, set, imgUrl, points, chart}.
+// Build a card and its image. Returns a library card (see the return below).
 // onStatus(msg) is called with progress updates (the image render is slow).
 async function buildPlayerCard(name, year, set, onStatus) {
   onStatus("Fetching stats & building card…");
@@ -29,15 +29,29 @@ async function buildPlayerCard(name, year, set, onStatus) {
   const file = ic.image?.output_file_name || ic.output_file_name;
   if (!folder || !file) throw new Error("Image built but no file path returned");
 
+  const pd = card.positions_and_defense || {};
+  const isPitcher = !!card.chart?.is_pitcher;
+  const cardYear = String(card.year);
+  const cardSet = String(card.set);
   return {
+    id: cardKey(card.name, cardYear, cardSet),
     name: card.name,
-    year: String(card.year),
-    set: String(card.set),
-    points: card.points,
+    year: cardYear,
+    set: cardSet,
+    points: Number(card.points) || 0,
     command: card.chart?.command,
     outs: card.chart?.outs,
-    isPitcher: !!card.chart?.is_pitcher,
+    isPitcher,
+    // "SP" | "RP" for pitchers; hitters carry their printed positions instead,
+    // e.g. {"SS": 2} or {"2B": 4, "LF/RF": 2}
+    role: isPitcher ? ("STARTER" in pd || card.player_sub_type === "starting_pitcher" ? "SP" : "RP") : null,
+    positions: isPitcher ? {} : pd,
+    ip: card.ip ?? null,
+    speed: card.speed?.speed ?? null,
+    hand: card.hand || "",
+    team: card.team || "",
     imgUrl: `${SB_BASE}/${folder.replace(/^\/+|\/+$/g, "")}/${encodeURIComponent(file)}`,
+    builtAt: Date.now(),
   };
 }
 

@@ -42,15 +42,37 @@ The game has no login, so **the room code is the password**. The rules in
   guessable by brute force. Deliberate trade-off for a two-person game — if it
   ever matters, use a longer code.
 
+## Building rosters
+
+The **Rosters** tab is your personal deck-building area:
+
+- **Card library:** type a name + season year (e.g. `Pedro Martinez` / `1999`) and
+  press **Build**. The card is built on Showdown Bot (the image takes ~30s) and
+  saved in your library, so you only build each card once. Builds queue up and
+  run in the background.
+- **Rosters:** up to 5 saved rosters. Drag cards (or press **+**) into the batting
+  order, bench, rotation, and bullpen; pick each hitter's position.
+- **Roster check:** the live budget bar and checklist enforce the team rules:
+  exactly 20 players, 5,000 points (bench players count at full value), all 9
+  positions covered, 4–5 starting pitchers, no player twice. Out-of-position
+  players and unspent points are warnings. The rules live in `RULES` in
+  [`js/store.js`](js/store.js) if you play house rules.
+
+Library and rosters are saved in **this browser only** (localStorage). Clearing
+site data or switching computers starts you fresh.
+
 ## Playing
 
-1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), one joins as HOME, the other as AWAY.
-2. **+ Add player** → name + year (e.g. `Pedro Martinez` / `1999`) → card is built from Showdown Bot (image takes ~30s).
-3. Drag cards: lineup slots #1–9, bench, bullpen, and on the field: AT BAT, 1B, 2B, 3B, MOUND.
-4. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).
-5. **Roll d20** — both players see the same animated roll.
-6. Click the out dots to add outs; +/− buttons for runs and half-innings.
-7. Double-click any card to zoom it.
+1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), pick a
+   roster to bring, and one joins as HOME, the other as AWAY. Your roster is dealt
+   onto the table: lineup #1–9 with positions, bench, rotation, bullpen.
+   **Load roster** swaps in a different one mid-session; **+ Add player** still
+   works for one-off additions.
+2. Drag cards to adjust between games: lineup slots #1–9, bench, rotation, bullpen, and on the field: AT BAT, 1B, 2B, 3B, MOUND.
+3. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).
+4. **Roll d20** — both players see the same animated roll.
+5. Click the out dots to add outs; +/− buttons for runs and half-innings.
+6. Double-click any card to zoom it.
 
 Team state lives in the Firebase room, so it persists between sessions as long
 as you reuse the same room code.

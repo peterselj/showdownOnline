@@ -10,7 +10,11 @@ const EMPTY_STATE = () => ({
 });
 
 class SyncBase {
-  constructor() { this.state = EMPTY_STATE(); this.listeners = []; }
+  constructor() {
+    this.state = EMPTY_STATE(); this.listeners = [];
+    // resolves once the first server snapshot has arrived
+    this.loaded = new Promise((res) => { this._markLoaded = res; });
+  }
   onChange(fn) { this.listeners.push(fn); }
   _emit() { this.listeners.forEach((fn) => fn(this.state)); }
 }
@@ -25,6 +29,7 @@ class FirebaseSync extends SyncBase {
       this.state = Object.assign(EMPTY_STATE(), v || {});
       this.state.cards = this.state.cards || {};
       this._emit();
+      this._markLoaded();
     });
   }
   // Partial updates with slash paths, e.g. {"counters/outs": 2}
@@ -38,6 +43,7 @@ class LocalSync extends SyncBase {
     this.chan = "BroadcastChannel" in window ? new BroadcastChannel(this.key) : null;
     if (this.chan) this.chan.onmessage = () => this._load();
     this._load();
+    this._markLoaded();
     setTimeout(() => this._emit(), 0);
   }
   _load() {
