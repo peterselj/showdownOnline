@@ -68,7 +68,7 @@ test locally, run `npx wrangler dev` in `worker/` and open the page with
 The **Rosters** tab is your personal deck-building area:
 
 - **Card library:** type a name + season year (e.g. `Pedro Martinez` / `1999`) and
-  press **Build**. The card is built on Showdown Bot (the image takes ~30s) and
+  press **Build**. The card is built on Showdown Bot (~10s, instant if already built) and
   saved in your library, so you only build each card once. Builds queue up and
   run in the background.
 - **Rosters:** up to 5 saved rosters. Drag cards (or press **+**) into the batting
