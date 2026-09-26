@@ -28,6 +28,7 @@ function route() {
   document.querySelectorAll("#tabs .tab").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
   hidePeek();
   if (tab === "rosters") RosterBuilder.show();
+  if (tab === "strategy") StrategyBuilder.show();
   if (tab === "play" && !sync) refreshRosterSelect();
 }
 

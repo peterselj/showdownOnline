@@ -203,7 +203,58 @@
 
 <!-- ============ STRATEGY ============ -->
 <section id="page-strategy" class="page hidden">
-  <div class="rb-empty"><p>Strategy decks are coming next — build a 60-card deck here, then bring it to the table.</p></div>
+  <div class="rb">
+    <aside class="rb-library" id="cat-panel">
+      <h2>Strategy cards</h2>
+      <div class="lib-filters">
+        <input id="cat-search" placeholder="Search name or effect…">
+      </div>
+      <div class="lib-filters">
+        <select id="cat-type">
+          <option value="">All types</option>
+          <option>Offense</option><option>Defense</option><option>Utility</option>
+        </select>
+        <select id="cat-year">
+          <option value="">All years</option>
+          <option>2000</option><option>2001</option><option>2002</option>
+          <option>2003</option><option>2004</option><option>2005</option>
+        </select>
+        <select id="cat-sort">
+          <option value="name">Name</option>
+          <option value="year">Year</option>
+        </select>
+      </div>
+      <p class="lib-count" id="cat-count">Loading cards…</p>
+      <div id="cat-grid" class="lib-grid"></div>
+    </aside>
+
+    <div class="rb-editor">
+      <div class="rb-roster-tabs" id="deck-tabs"></div>
+
+      <div id="dk-empty" class="rb-empty hidden">
+        <p>No strategy decks yet. Start one, then add cards from the list.</p>
+        <button class="btn btn-home" id="dk-first">+ New deck</button>
+      </div>
+
+      <div id="dk-body" class="hidden">
+        <div class="rb-head">
+          <input id="deck-name" maxlength="30" aria-label="Deck name">
+          <button class="btn btn-small" id="dk-dup">Duplicate</button>
+          <button class="btn btn-small" id="dk-del">Delete</button>
+        </div>
+
+        <div class="budget" id="deck-meter"></div>
+
+        <div class="rb-cols dk-cols">
+          <div class="rb-section" id="deck-list"></div>
+          <div class="rb-section">
+            <h3>Deck check</h3>
+            <ul id="dk-checks" class="rb-checks"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 </main>
 
@@ -240,6 +291,7 @@
 
 <!-- ============ HOVER MAGNIFIER ============ -->
 <div id="peek" class="hidden"><img id="peek-img" alt="card preview"></div>
+<div id="peek-face" class="hidden"></div>
 
 <!-- ============ CARD ZOOM ============ -->
 <div id="zoom" class="overlay hidden"><img id="zoom-img" alt="card"></div>
@@ -252,6 +304,7 @@
 <script src="js/api.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/rosters.js"></script>
+<script src="js/strategy.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

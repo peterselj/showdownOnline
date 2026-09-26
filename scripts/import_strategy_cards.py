@@ -1,0 +1,148 @@
+"""Import every MLB Showdown strategy card from showdowncards.com.
+
+Writes data/strategy-cards.json. Run from the repo root:
+
+    python scripts/import_strategy_cards.py            # list + store pages
+    python scripts/import_strategy_cards.py --images   # also fetch card images
+                                                       # (to transcribe missing text)
+
+Politeness: the site's robots.txt asks for a 10-second crawl delay, so every
+request waits 10s. Responses are cached in scripts/.cache/, so re-running only
+fetches what's new. A full first run takes ~2 hours (555 store pages).
+
+Effect text: the site's list omits the effect for many 2000-2002 cards. Those
+are transcribed by hand from the card images into
+data/strategy-text-transcribed.json ({card id: text}), which this script merges
+in and marks with "textSource": "transcribed".
+"""
+
+import hashlib, html, json, re, subprocess, sys, time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CACHE = ROOT / "scripts" / ".cache"
+OUT = ROOT / "data" / "strategy-cards.json"
+TRANSCRIBED = ROOT / "data" / "strategy-text-transcribed.json"
+SITE = "https://showdowncards.com"
+LIST = SITE + "/mlb/mlbsearch.php?a=strategy&limit={offset}&orderby={orderby}&sort={sort}"
+DELAY = 10
+EXPECTED = 555
+
+_last = 0.0
+
+
+def fetch(url, binary=False):
+    """GET with a disk cache and the site's 10s crawl delay."""
+    global _last
+    CACHE.mkdir(parents=True, exist_ok=True)
+    path = CACHE / hashlib.sha1(url.encode()).hexdigest()
+    if path.exists():
+        data = path.read_bytes()
+    else:
+        wait = DELAY - (time.time() - _last)
+        if wait > 0:
+            time.sleep(wait)
+        res = subprocess.run(["curl", "-sf", "-A", "Mozilla/5.0", url], capture_output=True, timeout=90)
+        _last = time.time()
+        if res.returncode != 0:
+            raise RuntimeError(f"fetch failed ({res.returncode}): {url}")
+        data = res.stdout
+        path.write_bytes(data)
+    if binary:
+        return data
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode("cp1252", errors="replace")
+
+
+def clean(fragment):
+    text = html.unescape(re.sub(r"<[^>]+>", " ", fragment)).replace("\xa0", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def base_name(name):
+    """Name used for the 4-copies rule: ignores case, stars and punctuation."""
+    return re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
+
+
+def read_list():
+    """The paging is unstable for ties, so union several sort orders."""
+    cards = {}
+    for orderby in ["name", "cardnumber", "year", "type", "whenplay", "description"]:
+        for sort in ["ASC", "DESC"]:
+            for offset in range(0, EXPECTED, 25):
+                page = fetch(LIST.format(offset=offset, orderby=orderby, sort=sort))
+                for tr in re.findall(r"<tr>\s*<td bgcolor='#CC0033'.*?</tr>", page, re.S):
+                    link = re.search(r"href='\.\./store/([^']+)'", tr)
+                    tds = re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)
+                    if not link or len(tds) < 7:
+                        continue
+                    cards[link.group(1)] = {
+                        "number": clean(tds[1]), "name": clean(tds[2]), "type": clean(tds[3]),
+                        "year": clean(tds[4]), "when": clean(tds[5]), "text": clean(tds[6]),
+                    }
+            print(f"  list by {orderby} {sort}: {len(cards)} unique", file=sys.stderr)
+            if len(cards) >= EXPECTED:
+                return cards
+    return cards
+
+
+def read_store_page(slug):
+    page = fetch(f"{SITE}/store/{slug}")
+    body = clean(page)
+    # e.g. "MLB Showdown 2000 Pennant Run Strategy Card #S1 Afterburners."
+    m = re.search(r"MLB Showdown (\d{4}) (.*?)\s*Strategy Card #\s*(\S+)", body)
+    img = re.search(r"src='\.\./(images/product/[^']+)'", page) or re.search(r'src="\.\./(images/product/[^"]+)"', page)
+    return {
+        "setYear": m.group(1) if m else None,
+        "set": (m.group(2).strip() or "Base") if m else None,
+        "cardNumber": m.group(3) if m else None,
+        "image": f"{SITE}/{img.group(1)}" if img else None,
+    }
+
+
+def main():
+    want_images = "--images" in sys.argv
+    print("Reading the strategy card list…", file=sys.stderr)
+    listed = read_list()
+    print(f"{len(listed)} listings (site says {EXPECTED})", file=sys.stderr)
+
+    transcribed = json.loads(TRANSCRIBED.read_text(encoding="utf-8")) if TRANSCRIBED.exists() else {}
+    cards = []
+    for i, (slug, row) in enumerate(sorted(listed.items())):
+        if i % 25 == 0:
+            print(f"  store pages {i}/{len(listed)}", file=sys.stderr)
+        store = read_store_page(slug)
+        year = store["setYear"] or ("20" + row["year"].strip("'") if row["year"] else None)
+        text, source = row["text"], "showdowncards.com"
+        if slug in transcribed:
+            text, source = transcribed[slug], "transcribed"
+        elif not text:
+            source = "missing"
+        if want_images and store["image"] and source == "missing":
+            (CACHE / "images").mkdir(parents=True, exist_ok=True)
+            (CACHE / "images" / f"{slug}.jpg").write_bytes(fetch(store["image"], binary=True))
+        cards.append({
+            "id": slug,
+            "name": row["name"].lstrip("*").strip(),
+            "baseName": base_name(row["name"]),
+            "year": year,
+            "set": store["set"],
+            "number": store["cardNumber"] or row["number"],
+            "type": {"Off": "Offense", "Def": "Defense", "Util": "Utility"}.get(row["type"], row["type"]),
+            "when": row["when"],
+            "text": text,
+            "textSource": source,
+            "starred": row["name"].count("*"),
+        })
+
+    cards.sort(key=lambda c: (c["year"] or "", c["set"] or "", c["name"]))
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(cards, ensure_ascii=False, indent=1), encoding="utf-8")
+    missing = sum(c["textSource"] == "missing" for c in cards)
+    print(f"Wrote {len(cards)} cards to {OUT.relative_to(ROOT)} ({missing} still missing effect text)", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
