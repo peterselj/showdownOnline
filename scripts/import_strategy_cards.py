@@ -21,7 +21,7 @@ his permission). With --images, every other card uses showdowncards.com's
 product image (200x272, watermarked). "imgSource" records which.
 """
 
-import hashlib, html, json, re, subprocess, sys, time
+import hashlib, html, json, re, subprocess, sys, time, urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -99,14 +99,28 @@ def read_list():
 
 
 def read_store_page(slug):
-    page = fetch(f"{SITE}/store/{slug}")
+    page = fetch(f"{SITE}/store/{urllib.parse.quote(slug)}")   # some slugs have curly quotes/dashes
     body = clean(page)
-    # e.g. "MLB Showdown 2000 Pennant Run Strategy Card #S1 Afterburners."
-    m = re.search(r"MLB Showdown (\d{4}) (.*?)\s*Strategy Card #\s*(\S+)", body)
+    # The wording varies by year:
+    #   "MLB Showdown 2000 Pennant Run Strategy Card #S1 Afterburners."
+    #   "MLB Showdown 2004 Base Set Offense Strategy Card S1 Bad Call"
+    #   "MLB Showdown 2000 Strategy #S1 Bad Call."        (no set: base set)
+    #   "MLB Showdown 2002 Base Set Strategy Card."      (no number)
+    #   "MLB 2003 Base Set Strategy Card"                 (no "Showdown")
+    m = re.search(r"MLB (?:Showdown )?(\d{4}) ?(.*?)\s*Strategy(?: Card)?\.?\s*#?\s*(S?\d+\b)?", body)
+    set_name = None
+    if m:
+        set_name = re.sub(r"\s*\b(Offense|Defense|Utility|Common|Rare)$", "", m.group(2).strip())
+        set_name = re.sub(r"\s*\bSet$", "", set_name).strip() or "Base"
+    if not m:   # fall back to the store address, e.g. "...-mlb-2003-trading-deadline-strategy"
+        for key, name in [("pennant-run", "Pennant Run"), ("trading-deadline", "Trading Deadline"), ("base", "Base")]:
+            if key in slug:
+                set_name = name
+                break
     img = re.search(r"src='\.\./(images/product/[^']+)'", page) or re.search(r'src="\.\./(images/product/[^"]+)"', page)
     return {
         "setYear": m.group(1) if m else None,
-        "set": (m.group(2).strip() or "Base") if m else None,
+        "set": set_name,
         "cardNumber": m.group(3) if m else None,
         "image": f"{SITE}/{img.group(1)}" if img else None,
     }
