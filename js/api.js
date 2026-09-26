@@ -1,44 +1,66 @@
-// Showdown Bot API (https://www.showdownbot.com) — card generation.
-// Their API has no CORS headers, so JSON calls go through the CORS proxy.
-// Generated card images are plain <img> hotlinks and need no proxy.
+// Card building through our card server (worker/ — a Cloudflare Worker).
+// The server calls Showdown Bot for us, and keeps a permanent, shrunken copy
+// of every card image (Showdown Bot deletes its own after a few minutes).
 
-const SB_BASE = "https://www.showdownbot.com";
+const IMG_MAX_WIDTH = 700;
 
-async function sbPost(path, body) {
-  const res = await fetch(window.CORS_PROXY(SB_BASE + path), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Showdown Bot ${path} failed: ${res.status}`);
-  return res.json();
+async function cardServer(path, opts = {}) {
+  let res;
+  try {
+    res = await fetch(window.CARD_SERVER + path, opts);
+  } catch {
+    throw new Error("Can't reach the card server — check your connection and try again");
+  }
+  const data = res.headers.get("Content-Type")?.includes("application/json") ? await res.json() : null;
+  if (!res.ok) throw new Error(data?.error || `Card server error ${res.status}`);
+  return data;
 }
 
-// Build a card and its image. Returns {name, year, set, imgUrl, points, chart}.
-// onStatus(msg) is called with progress updates (the image render is slow).
+// Shrink the full-size card PNG (~3.6 MB) to a ~100 KB WebP (JPEG where the
+// browser can't encode WebP).
+async function shrinkImage(blob) {
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, IMG_MAX_WIDTH / bmp.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bmp.width * scale);
+  canvas.height = Math.round(bmp.height * scale);
+  canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  const encode = (type, q) => new Promise((res) => canvas.toBlob(res, type, q));
+  const webp = await encode("image/webp", 0.85);
+  return webp && webp.type === "image/webp" ? webp : encode("image/jpeg", 0.85);
+}
+
+// Build (or fetch the already-built) card. Returns {name, year, set, points,
+// command, outs, isPitcher, imgUrl} — flat fields only, as the room's
+// database rules require.
+// onStatus(msg) is called with progress updates (a new card takes ~30s).
 async function buildPlayerCard(name, year, set, onStatus) {
-  onStatus("Fetching stats & building card…");
-  const built = await sbPost("/api/build_custom_card", { name, year, set });
-  if (!built.card) throw new Error(built.error_for_user || built.error || "No card returned");
-  const card = built.card;
+  onStatus("Building card on Showdown Bot (can take ~30s)…");
+  const res = await cardServer("/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, year: String(year), set: String(set) }),
+  });
 
-  onStatus("Rendering card image (can take ~30s)…");
-  const img = await sbPost("/api/build_image_for_card", { card });
-  const ic = img.card || img;
-  const folder = ic.image?.output_folder_path || ic.output_folder_path;
-  const file = ic.image?.output_file_name || ic.output_file_name;
-  if (!folder || !file) throw new Error("Image built but no file path returned");
+  let card = res.card;
+  if (!card) {
+    const { slug, token } = res.pending;
+    onStatus("Saving card image…");
+    const png = await fetch(`${window.CARD_SERVER}/source?t=${encodeURIComponent(token)}`);
+    if (!png.ok) throw new Error((await png.json().catch(() => ({}))).error || "Couldn't download the card image");
+    const small = await shrinkImage(await png.blob());
+    card = (await cardServer(`/cards/${slug}`, {
+      method: "PUT",
+      headers: { "Content-Type": small.type, "X-Card-Token": token },
+      body: small,
+    })).card;
+  }
 
-  return {
-    name: card.name,
-    year: String(card.year),
-    set: String(card.set),
-    points: card.points,
-    command: card.chart?.command,
-    outs: card.chart?.outs,
-    isPitcher: !!card.chart?.is_pitcher,
-    imgUrl: `${SB_BASE}/${folder.replace(/^\/+|\/+$/g, "")}/${encodeURIComponent(file)}`,
-  };
+  const out = {};
+  for (const k of ["name", "year", "set", "points", "command", "outs", "isPitcher", "imgUrl"]) {
+    if (card[k] !== undefined && card[k] !== null) out[k] = card[k];
+  }
+  return out;
 }
 
 window.buildPlayerCard = buildPlayerCard;

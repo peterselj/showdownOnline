@@ -13,6 +13,8 @@ window.FIREBASE_CONFIG = {
   measurementId: "G-TY4TMH2KDW",
 };
 
-// CORS proxy used for showdownbot.com API calls (their API has no CORS
-// headers). Card images themselves hotlink directly with no proxy.
-window.CORS_PROXY = (url) => "https://corsproxy.io/?url=" + encodeURIComponent(url);
+// Card server (the Cloudflare Worker in worker/): builds cards on Showdown Bot
+// and hosts their images permanently. Add ?cardserver=http://127.0.0.1:8787
+// to the page URL to test against `wrangler dev` locally.
+window.CARD_SERVER = new URLSearchParams(location.search).get("cardserver")
+  || "https://showdown.mlbshowdown.workers.dev";

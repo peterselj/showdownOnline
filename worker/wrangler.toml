@@ -1,0 +1,15 @@
+# Showdown card server — see src/index.js. Deploy from this folder:
+#   npx wrangler deploy
+# One-time setup (done): KV namespace created (id below); SIGNING_KEY secret set
+# with `npx wrangler secret put SIGNING_KEY` (any long random string).
+name = "showdown"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "CARDS"
+id = "bef0287e37d84b8e96d7167e83b99708"
+
+[vars]
+# Sites allowed to build cards (localhost is always allowed for testing).
+ALLOWED_ORIGINS = "https://peterselj.github.io"
