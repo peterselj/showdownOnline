@@ -30,7 +30,12 @@ export default {
       // Images are plain <img> loads: no Origin header, so they're always served.
       if (request.method === "GET" && path.startsWith("/img/")) return await serveImage(env, path.slice(5));
 
-      if (!isAllowedOrigin(origin, env)) return json({ error: "Origin not allowed" }, 403, cors);
+      // Refusals carry a CORS header so the page can show the reason instead
+      // of a generic network error. They grant nothing else.
+      if (!isAllowedOrigin(origin, env)) {
+        return json({ error: "This page's address isn't allowed to build cards — use the live site or http://localhost" },
+          403, { "Access-Control-Allow-Origin": "*" });
+      }
 
       if (request.method === "POST" && path === "/build") return await build(request, env, cors);
       if (request.method === "GET" && path === "/source") return await source(url, env, cors);

@@ -5,6 +5,9 @@
 const IMG_MAX_WIDTH = 700;
 
 async function cardServer(path, opts = {}) {
+  if (location.protocol === "file:") {
+    throw new Error("Cards can't be built from a page opened as a file. Run a local server (see README → Running locally) or use the live site.");
+  }
   let res;
   try {
     res = await fetch(window.CARD_SERVER + path, opts);

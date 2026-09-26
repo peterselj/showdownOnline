@@ -82,6 +82,19 @@ The **Rosters** tab is your personal deck-building area:
 Library and rosters are saved in **this browser only** (localStorage). Clearing
 site data or switching computers starts you fresh.
 
+## Running locally
+
+Don't open `index.html` by double-clicking it: a page opened as a file can't
+build cards (the card server only accepts the live site and `localhost`).
+Instead, on Windows double-click **`serve.bat`**, which serves the folder at
+<http://localhost:8000> and opens it. Anywhere else:
+
+```bash
+python -m http.server 8000
+```
+
+then open <http://localhost:8000>.
+
 ## Playing
 
 1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), pick a
