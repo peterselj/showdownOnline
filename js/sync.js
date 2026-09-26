@@ -7,6 +7,7 @@ const EMPTY_STATE = () => ({
   cards: {},           // id -> {id, side, zone, ord, name, year, set, imgUrl, ...}
   counters: { homeRuns: 0, awayRuns: 0, outs: 0, inning: 1, half: "top" },
   dice: { value: null, roller: "", rollId: 0 },
+  strat: {},           // id -> {cardId, side, zone, ord} (strategy cards)
 });
 
 class SyncBase {
@@ -28,6 +29,7 @@ class FirebaseSync extends SyncBase {
       const v = snap.val();
       this.state = Object.assign(EMPTY_STATE(), v || {});
       this.state.cards = this.state.cards || {};
+      this.state.strat = this.state.strat || {};
       this._emit();
       this._markLoaded();
     });
@@ -50,6 +52,7 @@ class LocalSync extends SyncBase {
     try { this.state = Object.assign(EMPTY_STATE(), JSON.parse(localStorage.getItem(this.key)) || {}); }
     catch { this.state = EMPTY_STATE(); }
     this.state.cards = this.state.cards || {};
+    this.state.strat = this.state.strat || {};
     this._emit();
   }
   update(patch) {

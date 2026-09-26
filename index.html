@@ -34,6 +34,10 @@
       <select id="roster-select"></select>
     </label>
     <p class="lobby-hint" id="roster-hint"></p>
+    <label>Bring strategy deck
+      <select id="deck-select"></select>
+    </label>
+    <p class="lobby-hint" id="deck-hint"></p>
     <div class="lobby-sides">
       <button id="join-home" class="btn btn-home">Join as HOME</button>
       <button id="join-away" class="btn btn-away">Join as AWAY</button>
@@ -47,12 +51,19 @@
 
   <!-- opponent panel (rendered upside down) -->
   <div id="opp-panel" class="team-panel opp">
-    <div class="panel-inner mirrored">
-      <div class="zone-row" id="opp-lineup"></div>
-      <div class="zone-row small">
-        <div class="labeled-zone"><span class="zone-label">Bench</span><div class="zone multi" data-zone="" id="opp-bench"></div></div>
-        <div class="labeled-zone"><span class="zone-label">Rotation</span><div class="zone multi" data-zone="" id="opp-rotation"></div></div>
-        <div class="labeled-zone"><span class="zone-label">Bullpen</span><div class="zone multi" data-zone="" id="opp-bullpen"></div></div>
+    <div class="panel-inner split mirrored">
+      <div class="panel-main">
+        <div class="zone-row" id="opp-lineup"></div>
+        <div class="zone-row small">
+          <div class="labeled-zone"><span class="zone-label">Bench</span><div class="zone multi" data-zone="" id="opp-bench"></div></div>
+          <div class="labeled-zone"><span class="zone-label">Rotation</span><div class="zone multi" data-zone="" id="opp-rotation"></div></div>
+          <div class="labeled-zone"><span class="zone-label">Bullpen</span><div class="zone multi" data-zone="" id="opp-bullpen"></div></div>
+        </div>
+      </div>
+      <div class="strat-area">
+        <div class="labeled-zone"><span class="zone-label">Deck <b id="opp-draw-n">0</b></span><div class="pile" id="opp-draw"></div></div>
+        <div class="labeled-zone grow"><span class="zone-label">Hand <b id="opp-hand-n">0</b></span><div class="hand" id="opp-hand"></div></div>
+        <div class="labeled-zone"><span class="zone-label">Discard <b id="opp-discard-n">0</b></span><div class="pile" id="opp-discard" title="View discard pile"></div></div>
       </div>
     </div>
     <div class="panel-title" id="opp-title">Opponent</div>
@@ -87,6 +98,10 @@
     </div>
 
     <div id="field">
+      <div id="play-area" class="strat-drop" data-szone="play">
+        <span class="fz-label">STRATEGY CARDS IN PLAY</span>
+        <div id="play-cards"></div>
+      </div>
       <svg id="diamond" viewBox="0 0 100 100" preserveAspectRatio="none">
         <polygon points="50,88 88,50 50,12 12,50" class="infield-dirt"/>
         <polygon points="50,80 80,50 50,20 20,50" class="infield-grass"/>
@@ -109,17 +124,29 @@
 
   <!-- my panel -->
   <div id="my-panel" class="team-panel mine">
-    <div class="panel-title" id="my-title">Me</div>
-    <div class="panel-inner">
-      <div class="zone-row" id="my-lineup"></div>
-      <div class="zone-row small">
-        <div class="labeled-zone"><span class="zone-label">Bench</span><div class="zone multi" id="my-bench"></div></div>
-        <div class="labeled-zone"><span class="zone-label">Rotation</span><div class="zone multi" id="my-rotation"></div></div>
-        <div class="labeled-zone"><span class="zone-label">Bullpen</span><div class="zone multi" id="my-bullpen"></div></div>
-        <div class="panel-buttons">
-          <button id="load-roster-btn" class="btn">Load roster</button>
-          <button id="add-player-btn" class="btn btn-small">+ Add player</button>
+    <div class="panel-title">
+      <span id="my-title">Me</span>
+      <span class="panel-actions">
+        <button id="load-roster-btn" class="btn btn-tiny">Load roster</button>
+        <button id="load-deck-btn" class="btn btn-tiny">Load deck</button>
+      </span>
+    </div>
+    <div class="panel-inner split">
+      <div class="panel-main">
+        <div class="zone-row" id="my-lineup"></div>
+        <div class="zone-row small">
+          <div class="labeled-zone"><span class="zone-label">Bench</span><div class="zone multi" id="my-bench"></div></div>
+          <div class="labeled-zone"><span class="zone-label">Rotation</span><div class="zone multi" id="my-rotation"></div></div>
+          <div class="labeled-zone"><span class="zone-label">Bullpen</span><div class="zone multi" id="my-bullpen"></div></div>
         </div>
+      </div>
+      <div class="strat-area">
+        <div class="labeled-zone"><span class="zone-label">Deck <b id="my-draw-n">0</b></span>
+          <div class="pile" id="my-draw" title="Click to draw a card"></div></div>
+        <div class="labeled-zone grow"><span class="zone-label">Your hand <b id="my-hand-n">0</b> · hidden from opponent</span>
+          <div class="hand strat-drop" id="my-hand" data-szone="hand"></div></div>
+        <div class="labeled-zone"><span class="zone-label">Discard <b id="my-discard-n">0</b></span>
+          <div class="pile strat-drop" id="my-discard" data-szone="discard" title="View discard pile"></div></div>
       </div>
     </div>
   </div>
@@ -271,23 +298,33 @@
   </div>
 </div>
 
-<!-- ============ ADD PLAYER MODAL ============ -->
-<div id="add-modal" class="overlay hidden">
+<!-- ============ LOAD DECK MODAL ============ -->
+<div id="deck-modal" class="overlay hidden">
   <div class="lobby-card">
-    <h2>Add player from Showdown Bot</h2>
-    <p class="lobby-sub">Quick add for this game only. It also goes into your card library.</p>
-    <label>Player name <input id="ap-name" placeholder="Pedro Martinez"></label>
-    <label>Season year <input id="ap-year" placeholder="1999" maxlength="9"></label>
-    <label>Card set
-      <select id="ap-set"><option>2004</option><option>2005</option></select>
-    </label>
+    <h2>Load a strategy deck</h2>
+    <p class="lobby-sub">Shuffles the deck and deals you 4 cards. Replaces your current deck, hand and discard.</p>
+    <label>Deck <select id="ld-select"></select></label>
     <div class="lobby-sides">
-      <button id="ap-go" class="btn btn-home">Build card</button>
-      <button id="ap-cancel" class="btn">Cancel</button>
+      <button id="ld-go" class="btn btn-home">Shuffle &amp; deal</button>
+      <button id="ld-cancel" class="btn">Cancel</button>
     </div>
-    <p id="ap-status" class="lobby-status"></p>
   </div>
 </div>
+
+<!-- ============ DISCARD PILE VIEWER ============ -->
+<div id="pile-modal" class="overlay hidden">
+  <div class="lobby-card pile-card">
+    <h2 id="pile-title">Discard pile</h2>
+    <div id="pile-list" class="pile-list"></div>
+    <div class="lobby-sides">
+      <button id="pile-shuffle" class="btn">Shuffle discard into deck</button>
+      <button id="pile-close" class="btn btn-home">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STRATEGY CARD ACTIONS ============ -->
+<div id="card-menu" class="card-menu hidden"></div>
 
 <!-- ============ HOVER MAGNIFIER ============ -->
 <div id="peek" class="hidden"><img id="peek-img" alt="card preview"></div>
@@ -305,6 +342,7 @@
 <script src="js/sync.js"></script>
 <script src="js/rosters.js"></script>
 <script src="js/strategy.js"></script>
+<script src="js/table-strategy.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

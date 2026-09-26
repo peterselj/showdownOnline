@@ -49,6 +49,17 @@
           }
         },
 
+        "strat": {
+          "$instId": {
+            ".validate": "$instId.length <= 40 && newData.hasChildren(['cardId', 'side', 'zone', 'ord'])",
+            "cardId": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "side":   { ".validate": "newData.val() === 'home' || newData.val() === 'away'" },
+            "zone":   { ".validate": "newData.val() === 'draw' || newData.val() === 'hand' || newData.val() === 'play' || newData.val() === 'discard'" },
+            "ord":    { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
         "$other": { ".validate": false }
       }
     }

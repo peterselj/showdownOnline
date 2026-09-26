@@ -29,7 +29,7 @@ function route() {
   hidePeek();
   if (tab === "rosters") RosterBuilder.show();
   if (tab === "strategy") StrategyBuilder.show();
-  if (tab === "play" && !sync) refreshRosterSelect();
+  if (tab === "play" && !sync) { refreshRosterSelect(); refreshDeckSelect(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -42,14 +42,14 @@ function initLobby() {
   if (params.get("room")) $("room-input").value = params.get("room");
   if (localStorage.getItem("showdown-name")) $("name-input").value = localStorage.getItem("showdown-name");
 
-  $("join-home").onclick = () => join("home", $("roster-select").value);
-  $("join-away").onclick = () => join("away", $("roster-select").value);
+  $("join-home").onclick = () => join("home", $("roster-select").value, $("deck-select").value);
+  $("join-away").onclick = () => join("away", $("roster-select").value, $("deck-select").value);
   $("roster-select").onchange = updateRosterHint;
 
   // Rejoining from a link keeps whatever is already on the table.
   if (params.get("room") && params.get("side")) {
     $("name-input").value = params.get("name") || $("name-input").value;
-    join(params.get("side"), "");
+    join(params.get("side"), "", "");
   }
 }
 
@@ -81,7 +81,7 @@ function updateRosterHint() {
     : "✓ Legal roster";
 }
 
-function join(side, rosterId) {
+function join(side, rosterId, deckId) {
   const room = $("room-input").value.trim().toUpperCase();
   myName = $("name-input").value.trim() || (side === "home" ? "Home" : "Away");
   if (!room) { $("lobby-status").textContent = "Enter a room code first."; return; }
@@ -97,15 +97,19 @@ function join(side, rosterId) {
   sync.update({ [`players/${side}`]: myName });
 
   const roster = rosterId && Rosters.get(rosterId);
-  if (roster) {
-    localStorage.setItem(LS_LAST_ROSTER, roster.id);
-    sync.loaded.then(() => {
-      const mine = Object.values(sync.state.cards).filter((c) => c.side === mySide);
-      if (!mine.length || confirm(`You already have ${mine.length} cards on this table. Replace them with "${roster.name}"?`)) {
-        loadRosterToTable(roster);
-      }
-    });
-  }
+  const deck = deckId && Decks.get(deckId);
+  if (roster) localStorage.setItem(LS_LAST_ROSTER, roster.id);
+  if (deck) localStorage.setItem(LS_LAST_DECK, deck.id);
+  sync.loaded.then(() => {
+    const cards = Object.values(sync.state.cards).filter((c) => c.side === mySide);
+    if (roster && (!cards.length || confirm(`You already have ${cards.length} cards on this table. Replace them with "${roster.name}"?`))) {
+      loadRosterToTable(roster);
+    }
+    const strat = Object.values(sync.state.strat || {}).filter((s) => s.side === mySide);
+    if (deck && (!strat.length || confirm(`You already have a strategy deck on this table. Replace it with a fresh shuffle of "${deck.name}"?`))) {
+      loadDeckToTable(deck);
+    }
+  });
 
   $("lobby").classList.add("hidden");
   $("game").classList.remove("hidden");
@@ -182,6 +186,7 @@ function render(state) {
   }
 
   renderDice(state.dice);
+  renderStrategy();
 }
 
 function makeCardEl(card) {
@@ -282,36 +287,7 @@ function wireGlobalUI() {
     if (r) { localStorage.setItem(LS_LAST_ROSTER, r.id); loadRosterToTable(r); }
   };
 
-  // add-player modal
-  $("add-player-btn").onclick = () => { $("ap-status").textContent = ""; $("add-modal").classList.remove("hidden"); };
-  $("ap-cancel").onclick = () => $("add-modal").classList.add("hidden");
-  $("ap-go").onclick = addPlayer;
-}
-
-async function addPlayer() {
-  const name = $("ap-name").value.trim();
-  const year = $("ap-year").value.trim();
-  const set = $("ap-set").value;
-  if (!name || !year) { $("ap-status").textContent = "Name and year required."; return; }
-  $("ap-go").disabled = true;
-  try {
-    const card = Library.find(name, year, set)
-      || await buildPlayerCard(name, year, set, (msg) => { $("ap-status").textContent = msg; });
-    Library.put(card);
-    const id = "c" + Date.now();
-    sync.update({
-      [`cards/${id}`]: tableCard(card, {
-        id, side: mySide, ord: Date.now(),
-        zone: card.isPitcher ? `${mySide}-bullpen` : `${mySide}-bench`,
-      }),
-    });
-    $("ap-status").textContent = `Added ${card.name} (${card.points} pts) ✓`;
-    $("ap-name").value = "";
-  } catch (err) {
-    $("ap-status").textContent = "Failed: " + err.message;
-  } finally {
-    $("ap-go").disabled = false;
-  }
+  wireStrategyTable();
 }
 
 // ---------------------------------------------------------------------------
