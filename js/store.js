@@ -240,3 +240,95 @@ function validateRoster(r, lib = Library.all()) {
 }
 
 const rosterIsLegal = (r, lib) => !validateRoster(r, lib).some((c) => c.level === "error");
+
+// ---------------------------------------------------------------------------
+// Strategy cards and decks
+// ---------------------------------------------------------------------------
+// The catalog (every strategy card ever printed) is a static file imported by
+// scripts/import_strategy_cards.py; decks are saved in this browser.
+const DECK_RULES = {
+  size: 60,        // exact number of cards in a deck
+  maxCopies: 4,    // per card name, counted across every printing/year
+  maxDecks: 5,
+};
+
+let _catalog = null;
+const StrategyCatalog = {
+  // Resolves to {id: card}. Loaded once per page.
+  async load() {
+    if (!_catalog) {
+      const res = await fetch("data/strategy-cards.json");
+      if (!res.ok) throw new Error(`Couldn't load strategy cards (${res.status})`);
+      _catalog = Object.fromEntries((await res.json()).map((c) => [c.id, c]));
+    }
+    return _catalog;
+  },
+  get(id) { return _catalog?.[id] || null; },
+  all() { return _catalog || {}; },
+};
+
+// Short year label, e.g. "'03".
+const yearTag = (card) => "'" + String(card.year || "").slice(-2);
+
+const LS_DECKS = "showdown-decks-v1";
+
+// Deck: {id, name, cards: {cardId: count}, updated}
+const newDeck = (name) => ({ id: "d" + Date.now().toString(36), name, cards: {}, updated: Date.now() });
+
+const Decks = {
+  all() { return lsGet(LS_DECKS, []); },
+  get(id) { return this.all().find((d) => d.id === id) || null; },
+  save(deck) {
+    deck.updated = Date.now();
+    const list = this.all();
+    const i = list.findIndex((d) => d.id === deck.id);
+    if (i >= 0) list[i] = deck; else list.push(deck);
+    lsSet(LS_DECKS, list);
+  },
+  remove(id) { lsSet(LS_DECKS, this.all().filter((d) => d.id !== id)); },
+};
+
+const deckSize = (deck) => Object.values(deck.cards).reduce((a, b) => a + b, 0);
+
+// Copies per card name across all printings: {baseName: {total, byId: {id: n}}}
+function deckCopies(deck, catalog = StrategyCatalog.all()) {
+  const out = {};
+  for (const [id, n] of Object.entries(deck.cards)) {
+    const card = catalog[id];
+    if (!card || !n) continue;
+    const entry = out[card.baseName] || (out[card.baseName] = { total: 0, byId: {} });
+    entry.total += n;
+    entry.byId[id] = n;
+  }
+  return out;
+}
+
+// How many more copies of this card's name the deck may take.
+function copiesLeft(deck, card, catalog) {
+  return DECK_RULES.maxCopies - (deckCopies(deck, catalog)[card.baseName]?.total || 0);
+}
+
+function validateDeck(deck, catalog = StrategyCatalog.all()) {
+  const out = [];
+  const add = (level, msg) => out.push({ level, msg });
+  const size = deckSize(deck);
+  if (size === DECK_RULES.size) add("ok", `${size}/${DECK_RULES.size} cards`);
+  else if (size < DECK_RULES.size) add("error", `${size}/${DECK_RULES.size} cards — add ${DECK_RULES.size - size}`);
+  else add("error", `${size}/${DECK_RULES.size} cards — cut ${size - DECK_RULES.size}`);
+
+  const over = Object.values(deckCopies(deck, catalog)).filter((e) => e.total > DECK_RULES.maxCopies);
+  for (const e of over) {
+    const ids = Object.keys(e.byId);
+    const printings = ids.map((id) => `${yearTag(catalog[id])} ×${e.byId[id]}`).join(", ");
+    add("error", `${catalog[ids[0]].name}: ${e.total} copies (max ${DECK_RULES.maxCopies}) — ${printings}`);
+  }
+  if (!over.length) add("ok", `No card over ${DECK_RULES.maxCopies} copies`);
+
+  const missing = Object.keys(deck.cards).filter((id) => !catalog[id]);
+  if (missing.length) add("warn", `${missing.length} card(s) no longer in the catalog`);
+
+  const rank = { error: 0, warn: 1, ok: 2 };
+  return out.sort((a, b) => rank[a.level] - rank[b.level]);
+}
+
+const deckIsLegal = (deck, catalog) => !validateDeck(deck, catalog).some((c) => c.level === "error");

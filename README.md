@@ -82,6 +82,28 @@ The **Rosters** tab is your personal deck-building area:
 Library and rosters are saved in **this browser only** (localStorage). Clearing
 site data or switching computers starts you fresh.
 
+## Building strategy decks
+
+The **Strategy** tab lists every strategy card printed, 2000–2005 (555 cards
+across 15 sets). Search by name or effect, filter by type and year, hover a card
+to magnify it, and press **+** to add it to a deck.
+
+- Up to 5 decks, saved in this browser like rosters.
+- **Deck check:** exactly **60 cards**, and at most **4 copies of a card name
+  across all years** (e.g. two '02 and two '04 Bad Call is the limit). Names
+  match ignoring case, stars and punctuation. Rules live in `DECK_RULES` in
+  [`js/store.js`](js/store.js).
+
+**Where the cards come from:** [`data/strategy-cards.json`](data/strategy-cards.json)
+is built once by [`scripts/import_strategy_cards.py`](scripts/import_strategy_cards.py)
+from [ShowdownCards.com](https://showdowncards.com)'s scouting reports (at the
+10-second crawl delay its robots.txt asks for). Card images in
+[`data/strategy-img/`](data/strategy-img/): the 2004–2005 scans are from
+[Mark0552/ShowdownSim](https://github.com/Mark0552/ShowdownSim), used with
+Mark's permission (matched by
+[`scripts/import_strategy_images.py`](scripts/import_strategy_images.py));
+the rest are ShowdownCards.com's product images.
+
 ## Running locally
 
 Don't open `index.html` by double-clicking it: a page opened as a file can't
@@ -98,21 +120,26 @@ then open <http://localhost:8000>.
 ## Playing
 
 1. Both visit the page, enter the **same room code** (e.g. `LINDOR`), pick a
-   roster to bring, and one joins as HOME, the other as AWAY. Your roster is dealt
-   onto the table: lineup #1–9 with positions, bench, rotation, bullpen.
-   **Load roster** swaps in a different one mid-session; **+ Add player** still
-   works for one-off additions.
+   roster and a strategy deck to bring, and one joins as HOME, the other as AWAY.
+   Your roster is dealt onto the table (lineup #1–9 with positions, bench,
+   rotation, bullpen) and your deck is shuffled with a 4-card opening hand.
+   **Load roster** / **Load deck** swap in a different one mid-session.
 2. Drag cards to adjust between games: lineup slots #1–9, bench, rotation, bullpen, and on the field: AT BAT, 1B, 2B, 3B, MOUND.
-3. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).
-4. **Roll d20** — both players see the same animated roll.
-5. Click the out dots to add outs; +/− buttons for runs and half-innings.
-6. Double-click any card to zoom it.
+3. **Strategy cards:** click your deck to draw (usually one per half inning).
+   Your hand is face up to you; your opponent sees card backs. Play a card by
+   dragging it (or click → **Play face up**) to **Strategy cards in play** beside
+   the field. Leave it there, or click it to **Discard** or send it **Back to
+   hand** (for cards like Insult to Injury). Click a discard pile to view it;
+   you can shuffle yours back into your deck.
+4. Your cards show right-side up; your opponent's cards on the field are upside down (mirrored table, like sitting across from each other).
+5. **Roll d20** — both players see the same animated roll.
+6. Click the out dots to add outs; +/− buttons for runs and half-innings.
+7. Double-click any card to zoom it.
 
 Team state lives in the Firebase room, so it persists between sessions as long
 as you reuse the same room code.
 
 ## Later ideas
 
-- Strategy card decks (draw/hand/discard)
-- Persistent named rosters ("load my 2004 Red Sox")
 - Automated at-bat resolution (compare roll to control/on-base, highlight chart row)
+- A CPU opponent, then a roguelike where beating a team lets you steal one of its cards
