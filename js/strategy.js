@@ -202,7 +202,7 @@ const StrategyBuilder = (() => {
         <div class="ct-info">
           <span class="lt-name">${esc(c.name)} <small>${esc(yearTag(c))}</small></span>
           <span class="ct-when">${esc(c.when)}</span>
-          <span class="ct-text">${c.text ? esc(c.text) : "<em>effect not transcribed yet</em>"}</span>
+          <span class="ct-text">${c.text ? esc(c.text) : "<em>hover to read the card</em>"}</span>
         </div>
         <div class="lt-actions">
           ${inDeck ? `<span class="ct-count" title="In this deck">${inDeck}</span>` : ""}
