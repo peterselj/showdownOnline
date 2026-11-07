@@ -20,7 +20,6 @@ from .cards import EVENTS, OUT_EVENTS
 from .engine import Env, solve, event_run_values
 
 CHART = [f"c_{e}" for e in EVENTS]
-SPEEDS = (10, 15, 20)
 
 
 @dataclass
@@ -28,16 +27,27 @@ class League:
     batters: pd.DataFrame
     pitchers: pd.DataFrame
     env: Env
-    rv_by_speed: dict          # speed -> run value of each result
+    sol: object                # the league's solved inning
+    rv_by_speed: dict          # speed -> run value of each result (filled on demand by rv())
     pa_per_inning: float
     runs_per_9: float
     pair_probs: np.ndarray     # [batter, pitcher, event]
     pitcher_weights: np.ndarray
 
+    def rv(self, speed) -> np.ndarray:
+        """Run value of each result for a batter of this Speed (speed changes his double plays).
+
+        2000 cards use 10/15/20 (C/B/A); 2004/05 cards print a number, about 8-25.
+        """
+        if speed not in self.rv_by_speed:
+            self.rv_by_speed[speed] = event_run_values(self.env, self.sol, batter_speed=float(speed))
+        return self.rv_by_speed[speed]
+
 
 def _fielding_totals(batters: pd.DataFrame) -> tuple[float, float]:
     """Average fielding of a typical starter at each spot, summed for the infield/outfield."""
     pos = batters.groupby("primary_pos")["primary_fielding"].mean()
+    pos = pos.reindex(["1B", "2B", "3B", "SS", "LF-RF", "CF"]).fillna(0)
     infield = pos["1B"] + pos["2B"] + pos["3B"] + pos["SS"]
     outfield = 2 * pos["LF-RF"] + pos["CF"]
     return float(infield), float(outfield)
@@ -63,16 +73,15 @@ def build_league(cards: pd.DataFrame) -> League:
     env = Env(probs=tuple(lg_probs), batter_speed=speed, runner_speed=speed,
               infield=infield, outfield=outfield)
     sol = solve(env)
-    rv = {s: event_run_values(env, sol, batter_speed=s) for s in SPEEDS}
-    rv["league"] = event_run_values(env, sol)
-    return League(bat, pit, env, rv, sol.pa_per_inning, sol.runs_per_9, pair, w)
+    rv = {"league": event_run_values(env, sol)}
+    return League(bat, pit, env, sol, rv, sol.pa_per_inning, sol.runs_per_9, pair, w)
 
 
 def value_batters(lg: League) -> pd.DataFrame:
     probs = np.einsum("bpe,p->be", lg.pair_probs, lg.pitcher_weights)   # vs average pitching
     lg_rv = float(np.asarray(lg.env.probs) @ lg.rv_by_speed["league"])  # ~0 by construction
     out = lg.batters.copy()
-    rv_pa = np.array([probs[i] @ lg.rv_by_speed[int(s)] for i, s in enumerate(out["speed"])])
+    rv_pa = np.array([probs[i] @ lg.rv(int(s)) for i, s in enumerate(out["speed"])])
     out["runs_per_pa"] = rv_pa - lg_rv
     out["raa_per_game"] = out["runs_per_pa"] * lg.pa_per_inning   # one lineup slot, 9 innings
     out["reach_base_pct"] = 1 - probs[:, [EVENTS.index(e) for e in OUT_EVENTS]].sum(axis=1)
@@ -127,11 +136,12 @@ def batter_marginals(lg: League) -> pd.DataFrame:
     pchart = lg.pitchers[CHART].to_numpy(float) / 20
     ctl = lg.pitchers["control"].to_numpy(float)
     w = lg.pitcher_weights
+    top_speed = int(lg.batters["speed"].max())   # don't go past the fastest real card
 
     def raa(chart, ob, speed):
         pp = np.clip(20 - (ob - ctl), 0, 20) / 20
         probs = (pp[:, None] * pchart + (1 - pp[:, None]) * chart[None, :] / 20).T @ w
-        return (probs @ lg.rv_by_speed[speed]) * lg.pa_per_inning
+        return (probs @ lg.rv(speed)) * lg.pa_per_inning
 
     def swap(chart, frm, to):
         """Move one die face from result `frm` to result `to` (None if impossible)."""
@@ -143,7 +153,7 @@ def batter_marginals(lg: League) -> pd.DataFrame:
 
     changes = {
         "+1 On-Base": lambda c, ob, s: (c, ob + 1, s),
-        "Speed C->B / B->A (+5)": lambda c, ob, s: (c, ob, s + 5) if s < 20 else None,
+        "+5 Speed (2000: C->B / B->A)": lambda c, ob, s: (c, ob, s + 5) if s + 5 <= top_speed else None,
         "GB face -> 1B": lambda c, ob, s: (swap(c, "GB", "1B"), ob, s),
         "SO face -> 1B": lambda c, ob, s: (swap(c, "SO", "1B"), ob, s),
         "FB face -> 1B": lambda c, ob, s: (swap(c, "FB", "1B"), ob, s),
