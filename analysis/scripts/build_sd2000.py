@@ -69,7 +69,8 @@ def make_findings(hb: pd.DataFrame, pv: pd.DataFrame, rv: dict, tables: dict, st
         out.append(f"Very fast runners (Speed 24+) are the clearest hitter bargain: {len(fast)} cards average "
                    f"{fast['surplus'].mean():+.2f} runs a game above their price (everyone else {rest['surplus'].mean():+.2f}), "
                    f"stealing {fast['sb_per_game'].mean():.1f} bases a game. A steal is worth {rv['SB']:+.2f} runs, "
-                   f"caught stealing {rv['CS']:+.2f}, so it pays only at about 72%+ success.")
+                   f"caught stealing {rv['CS']:+.2f}, so stealing 2nd pays only at "
+                   f"{-rv['CS'] / (rv['SB'] - rv['CS']):.0%}+ success.")
 
     cat = big[big["primary_spot"] == "C"].copy()
     if len(cat):
@@ -78,8 +79,9 @@ def make_findings(hb: pd.DataFrame, pv: pd.DataFrame, rv: dict, tables: dict, st
         weak, strong = cat[cat["arm"] <= 7], cat[cat["arm"] >= 12]
         out.append(f"Catcher arm, priced from every real steal attempt: compared with the league's catchers, a +5 arm "
                    f"costs {-d[5]:.2f} runs a game and a +3 {-d[3]:.2f}, while +12 gains {d[12]:+.2f} and +14 {d[14]:+.2f}. "
-                   f"Runners go when they are at least {steals['T']:.0%} to make it, which matches real success rates; "
-                   f"if they never adjusted, the spread would be wider (+5 {f[5]:+.2f}, +14 {f[14]:+.2f}). "
+                   f"That assumes runners only go when the steal pays (at least {steals['T']:.0%} to make it); real "
+                   f"runners succeed 75-85% of the time, a little bolder than that. If they never adjusted to the "
+                   f"catcher at all, the spread would be wider (+5 {f[5]:+.2f}, +14 {f[14]:+.2f}); the truth is in between. "
                    f"Weak-armed catchers ({len(weak)} cards) average {weak['surplus'].mean():+.2f} vs price; "
                    f"+12 and up ({len(strong)}) {strong['surplus'].mean():+.2f}.")
 
