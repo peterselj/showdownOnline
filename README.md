@@ -9,6 +9,9 @@ Player cards are generated from [Showdown Bot](https://www.showdownbot.com)
 in the 2004/2005 design (through our [card server](#card-server)): type a name +
 season year and the card is built into your library.
 
+Card value analysis (which cards give the most per point) lives in
+[`analysis/`](analysis/README.md).
+
 ## Setup (one time, ~5 minutes)
 
 The page is static, so realtime sync uses Firebase's free tier:
