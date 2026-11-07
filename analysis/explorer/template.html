@@ -1,0 +1,390 @@
+<meta charset="utf-8">
+<title>Showdown Card Values</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky control bar over a points-vs-value scatter, then a wrapping grid of card tiles
+   drawn after the Showdown card itself (On-Base badge, 20-face chart strip, points). */
+:root {
+  --bg: #eef1f5; --surface: #ffffff; --surface-2: #f5f7fa; --ink: #142031; --muted: #5b6878;
+  --line: #d5dbe3; --accent: #1f5fbf; --accent-soft: #dce7f8;
+  --good: #1b7f49; --good-soft: #dcf1e4; --bad: #b8353a; --bad-soft: #f8e0e1; --warn-soft: #fbf1d9; --warn: #7a5a06;
+  --o-out: #d9dee6; --o-bb: #b9cdee; --o-1b: #7ea4e0; --o-xbh: #3c73cc; --o-hr: #143f8a;
+  --t-S: #0f6b3c; --t-A: #3c9a5f; --t-B: #8f9aa8; --t-C: #c9853a; --t-D: #b8353a;
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e131a; --surface: #171e28; --surface-2: #1d2531; --ink: #e6ebf2; --muted: #98a4b4;
+  --line: #2b3543; --accent: #7aa7ee; --accent-soft: #1d2d47;
+  --good: #5cc98b; --good-soft: #15301f; --bad: #f07b7f; --bad-soft: #3a1b1d; --warn-soft: #33290f; --warn: #e8c66a;
+  --o-out: #313b4a; --o-bb: #34507c; --o-1b: #4a72b4; --o-xbh: #6f9be6; --o-hr: #b9d1fa;
+  --t-S: #5cc98b; --t-A: #3f9c63; --t-B: #6c7888; --t-C: #d39a55; --t-D: #f07b7f;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #171e28; --surface-2: #1d2531; --ink: #e6ebf2; --muted: #98a4b4;
+  --line: #2b3543; --accent: #7aa7ee; --accent-soft: #1d2d47;
+  --good: #5cc98b; --good-soft: #15301f; --bad: #f07b7f; --bad-soft: #3a1b1d; --warn-soft: #33290f; --warn: #e8c66a;
+  --o-out: #313b4a; --o-bb: #34507c; --o-1b: #4a72b4; --o-xbh: #6f9be6; --o-hr: #b9d1fa;
+  --t-S: #5cc98b; --t-A: #3f9c63; --t-B: #6c7888; --t-C: #d39a55; --t-D: #f07b7f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { padding-block: 28px 18px; display: grid; gap: 14px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 5vw, 44px); line-height: 1; letter-spacing: .01em; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 70ch; }
+.caveat { background: var(--warn-soft); color: var(--ink); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; max-width: 900px; }
+.caveat b { color: var(--warn); font-family: var(--display); font-size: 15px; letter-spacing: .06em; text-transform: uppercase; }
+.caveat p { margin: 0; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar .wrap { padding-block: 10px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ctl > label, .lbl { font-family: var(--display); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+select, input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+input[type=search] { width: 170px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: .03em; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.chip.sep { margin-left: 8px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+main { padding-block: 18px 48px; display: grid; gap: 18px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: baseline; }
+.panel-head h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 0; }
+.panel-head p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.scatter { width: 100%; height: auto; display: block; margin-top: 8px; }
+.scatter text { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.scatter .axis-title { font-family: var(--display); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.scatter .grid { stroke: var(--line); stroke-width: 1; }
+.scatter .fit { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .55; fill: none; }
+.scatter circle { stroke: var(--surface); stroke-width: 1; cursor: pointer; }
+.scatter circle.dim { opacity: .14; }
+.scatter .lab { fill: var(--ink); font-family: var(--body); font-size: 12px; font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+.summary { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; justify-content: space-between; }
+.summary h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 0; }
+.summary p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 9px; min-width: 0; scroll-margin-top: 90px; }
+.card.flash { outline: 3px solid var(--accent); outline-offset: 1px; }
+.c-top { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; }
+.cmd { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--surface); line-height: 1; text-align: center; }
+.cmd b { font-family: var(--display); font-size: 22px; font-weight: 700; display: block; }
+.cmd small { font-family: var(--display); font-size: 9.5px; letter-spacing: .08em; display: block; opacity: .8; }
+.who { min-width: 0; }
+.who .nm { font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1.1; overflow-wrap: anywhere; }
+.who .meta { font-size: 12.5px; color: var(--muted); }
+.pts { text-align: right; font-family: var(--display); line-height: 1; }
+.pts b { font-size: 24px; font-weight: 700; display: block; font-variant-numeric: tabular-nums; }
+.pts small { font-size: 10.5px; letter-spacing: .1em; color: var(--muted); }
+.attrs { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font-size: 12px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+.tag.hi { background: var(--accent-soft); border-color: transparent; }
+.tag.icon { font-family: var(--display); letter-spacing: .04em; color: var(--muted); }
+.strip { display: grid; grid-template-columns: repeat(20, 1fr); gap: 1px; border-radius: 4px; overflow: hidden; }
+.strip i { height: 14px; display: block; }
+.ranges { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.ranges span { white-space: nowrap; margin-right: 7px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; border-top: 1px solid var(--line); padding-top: 9px; }
+.stat .k { font-family: var(--display); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font-family: var(--display); font-weight: 600; font-size: 19px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat .u { font-size: 11px; color: var(--muted); }
+.pos { color: var(--good); } .neg { color: var(--bad); }
+.tier { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 20px; color: var(--surface); }
+.empty { padding: 30px; text-align: center; color: var(--muted); }
+.more { justify-self: center; }
+.btn { font-family: var(--display); font-weight: 600; font-size: 16px; letter-spacing: .04em; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 18px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+footer { color: var(--muted); font-size: 13px; padding-bottom: 32px; display: grid; gap: 6px; max-width: 80ch; }
+footer p { margin: 0; }
+@media (max-width: 560px) { input[type=search] { width: 100%; } .ctl.search { flex: 1 1 100%; } .chip.sep { margin-left: 0; } }
+@media (prefers-reduced-motion: no-preference) { .card { transition: outline-color .2s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Showdown Card Values</h1>
+    <p class="lede">Every card scored by the exact dice math against the rest of its pool. <strong>Value</strong> is runs added per game over an average card. <strong>Bargain</strong> is how far that beats a typical card at the same points. Tiers rank bargains within hitters, starters and relievers.</p>
+    <div class="caveat" role="note">
+      <b>Model, not game results</b>
+      <p>The math doesn't count stolen bases, catcher arm or a player's own glove yet, and it ignores icons. So fast runners, strong-armed catchers and slick fielders play better than they score here. Usage and win rates need showdown2000.fun's game logs, which only its owners can share.</p>
+    </div>
+  </header>
+</div>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="ctl"><label for="pool">Cards</label><select id="pool"></select></div>
+    <div class="ctl"><span class="lbl">Position</span><div class="chips" id="chips" role="group" aria-label="Position"></div></div>
+    <div class="ctl"><label for="sort">Sort</label><select id="sort"></select></div>
+    <div class="ctl search"><label for="q" class="lbl">Find</label><input id="q" type="search" placeholder="Player name" autocomplete="off"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <main>
+    <section class="panel" aria-labelledby="sc-title">
+      <div class="panel-head">
+        <h2 id="sc-title">Points vs value</h2>
+        <p id="sc-note"></p>
+      </div>
+      <svg class="scatter" id="scatter" viewBox="0 0 900 300" role="img" aria-label="Scatter of card points against value"></svg>
+      <div class="legend" id="tier-legend"></div>
+    </section>
+
+    <section aria-labelledby="g-title" style="display:grid; gap:12px">
+      <div class="summary"><h2 id="g-title"></h2><p id="g-note"></p></div>
+      <div class="legend" id="chart-legend"></div>
+      <div class="grid" id="grid"></div>
+      <button class="btn more" id="more" hidden>Show more</button>
+    </section>
+  </main>
+  <footer>
+    <p>How it's scored: each half-inning is solved exactly as a Markov chain over the 24 base/out states, with optimal extra-base decisions. Hitters face the pool's pitchers weighted by innings; pitchers face the pool's average lineup. The league is every card with at least 250 plate appearances or 30 innings that season (Showdown Bot's own sample-size flag).</p>
+    <p>Bargain = value minus the straight-line fit of value on points within hitters, starters or relievers. Cards at the minimum price sort last under "Worst bargain", since they can't get cheaper. Tiers: S top 5%, A next 15%, B next 30%, C next 30%, D bottom 20%.</p>
+    <p>Cards: Showdown Bot (showdownbot.com) card database, downloaded 2026-11-07; WotC 2000 set from the birdman093 and digitgopher fan datasets.</p>
+  </footer>
+</div>
+
+<script>
+const D = __DATA__;
+const $ = (id) => document.getElementById(id);
+const EV = D.events;
+const OUTS = new Set(["PU", "SO", "GB", "FB"]);
+const EV_COLOR = { PU: "--o-out", SO: "--o-out", GB: "--o-out", FB: "--o-out", BB: "--o-bb", "1B": "--o-1b", "1B+": "--o-1b", "2B": "--o-xbh", "3B": "--o-xbh", HR: "--o-hr" };
+const TIERS = [["S", .05], ["A", .20], ["B", .50], ["C", .80], ["D", 1.01]];
+const HITTER_CHIPS = ["All", "C", "1B", "2B", "3B", "SS", "LF/RF", "CF", "DH"];
+const PITCHER_CHIPS = ["SP", "RP"];
+const EXPAND = { "LF-RF": ["LF/RF"], "LF/RF": ["LF/RF"], OF: ["LF/RF", "CF"], IF: ["1B", "2B", "3B", "SS"] };
+const NAMES = { All: "hitters", C: "catchers", "1B": "first basemen", "2B": "second basemen", "3B": "third basemen", SS: "shortstops", "LF/RF": "corner outfielders", CF: "center fielders", DH: "designated hitters", SP: "starting pitchers", RP: "relievers and closers" };
+
+const SORTS = {
+  bargain: { label: "Best bargain", fn: (a, b) => b.s - a.s },
+  overpay: { label: "Worst bargain", fn: (a, b) => (a.floor - b.floor) || (a.s - b.s) },
+  value: { label: "Highest value", fn: (a, b) => b.v - a.v },
+  low: { label: "Lowest value", fn: (a, b) => a.v - b.v },
+  points: { label: "Points, high to low", fn: (a, b) => b.p - a.p },
+  cheap: { label: "Points, low to high", fn: (a, b) => a.p - b.p },
+  cmd: { label: "On-Base / Control", fn: (a, b) => (b.ob ?? b.ctl) - (a.ob ?? a.ctl) || b.s - a.s },
+  speed: { label: "Speed / IP", fn: (a, b) => (b.sp ?? b.ip) - (a.sp ?? a.ip) || b.s - a.s },
+  glove: { label: "Fielding at position", fn: (a, b) => b.glove - a.glove || b.s - a.s, posOnly: true },
+};
+
+let state = { pool: D.pools[0].id, group: "All", sort: "bargain", q: "" };
+try { Object.assign(state, JSON.parse(localStorage.getItem("sd-values") || "{}")); } catch (e) {}
+const save = () => { try { localStorage.setItem("sd-values", JSON.stringify(state)); } catch (e) {} };
+const PAGE = 60;
+let shown = PAGE;
+
+const norm = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const sign = (x, d = 3) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d);
+
+function parsePos(str) {
+  return String(str || "").split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
+    const m = s.match(/^(.+?)\+(\d+)$/);
+    return m ? { pos: m[1], f: +m[2] } : { pos: s, f: 0 };
+  });
+}
+
+// Tier and rank per pool, computed once.
+function prepare(pool) {
+  if (pool.ready) return;
+  const groups = { H: pool.hitters, SP: pool.pitchers.filter((p) => p.role === "Starter"), RP: pool.pitchers.filter((p) => p.role !== "Starter") };
+  for (const [g, list] of Object.entries(groups)) {
+    const ranked = [...list].sort((a, b) => b.s - a.s);
+    const minP = Math.min(...list.map((c) => c.p));
+    ranked.forEach((c, i) => {
+      c.rank = i + 1; c.of = ranked.length; c.grp = g; c.floor = c.p === minP ? 1 : 0;
+      const q = i / ranked.length;
+      c.tier = TIERS.find(([, cut]) => q < cut)[0];
+      c.key = norm(c.n);
+      if (g === "H") {
+        c.posList = parsePos(c.pos);
+        c.spots = new Set(c.posList.flatMap((p) => EXPAND[p.pos] || [p.pos]));
+      }
+    });
+  }
+  pool.ready = true;
+}
+
+const pool = () => D.pools.find((p) => p.id === state.pool) || D.pools[0];
+const isPitchGroup = () => state.group === "SP" || state.group === "RP";
+
+function gloveAt(c, spot) {
+  let best = -1;
+  for (const p of c.posList || []) if ((EXPAND[p.pos] || [p.pos]).includes(spot)) best = Math.max(best, p.f);
+  return best;
+}
+
+function members() {
+  const P = pool();
+  if (state.group === "SP") return P.pitchers.filter((c) => c.role === "Starter");
+  if (state.group === "RP") return P.pitchers.filter((c) => c.role !== "Starter");
+  if (state.group === "All") return P.hitters.map((c) => ((c.glove = 0), c));
+  return P.hitters.filter((c) => c.spots.has(state.group)).map((c) => ((c.glove = gloveAt(c, state.group)), c));
+}
+
+function unit() {
+  if (state.group === "SP") return { v: "runs saved / start", short: "per start" };
+  if (state.group === "RP") return { v: "runs saved / outing", short: "per outing" };
+  return { v: "runs / game", short: "per game" };
+}
+
+function chartRanges(c) {
+  let f = 1; const out = [];
+  EV.forEach((e, i) => {
+    const n = c.c[i];
+    if (!n) return;
+    out.push(`<span>${e} ${n === 1 ? f : f + "–" + (f + n - 1)}</span>`);
+    f += n;
+  });
+  return out.join("");
+}
+
+function strip(c) {
+  let cells = "";
+  EV.forEach((e, i) => { for (let k = 0; k < c.c[i]; k++) cells += `<i style="background:var(${EV_COLOR[e]})" title="${e}"></i>`; });
+  return `<div class="strip" aria-hidden="true">${cells}</div>`;
+}
+
+function tile(c, idx) {
+  const pitch = c.grp !== "H";
+  const u = unit();
+  const posTags = pitch ? "" : c.posList.map((p) => {
+    const hi = state.group !== "All" && (EXPAND[p.pos] || [p.pos]).includes(state.group);
+    return `<span class="tag${hi ? " hi" : ""}">${esc(p.pos.replace("LF-RF", "LF/RF"))}${p.pos === "DH" ? "" : " +" + p.f}</span>`;
+  }).join("");
+  const attrs = pitch
+    ? `<span class="tag">${esc(c.role)}</span><span class="tag">IP ${c.ip}</span><span class="tag">${c.ra9.toFixed(2)} runs / 9</span>`
+    : `${posTags}<span class="tag">Speed ${c.sp}</span>`;
+  const icons = c.ic ? c.ic.split(" ").map((i) => `<span class="tag icon" title="Icon (not counted)">${esc(i)}</span>`).join("") : "";
+  const meta = [c.t, c.y].filter(Boolean).join(" · ");
+  return `<article class="card" id="card-${idx}">
+    <div class="c-top">
+      <div class="cmd" title="${pitch ? "Control" : "On-Base"}"><b>${pitch ? c.ctl : c.ob}</b><small>${pitch ? "CTRL" : "OB"}</small></div>
+      <div class="who"><div class="nm">${esc(c.n)}</div><div class="meta">${esc(meta)}</div></div>
+      <div class="pts"><b>${c.p}</b><small>PTS</small></div>
+    </div>
+    <div class="attrs">${attrs}${icons}</div>
+    ${strip(c)}
+    <div class="ranges">${chartRanges(c)}</div>
+    <div class="stats">
+      <div class="stat"><div class="k">Value</div><div class="v ${c.v >= 0 ? "pos" : "neg"}">${sign(c.v, pitch && state.group === "SP" ? 2 : 3)}</div><div class="u">${u.v}</div></div>
+      <div class="stat"><div class="k">Bargain</div><div class="v ${c.s >= 0 ? "pos" : "neg"}">${sign(c.s, pitch && state.group === "SP" ? 2 : 3)}</div><div class="u">#${c.rank} of ${c.of}${c.floor ? " · min price" : ""}</div></div>
+      <div class="tier" style="background:var(--t-${c.tier})" title="Bargain tier ${c.tier}">${c.tier}</div>
+    </div>
+  </article>`;
+}
+
+function renderScatter(list, all) {
+  const svg = $("scatter");
+  const W = 900, H = 300, L = 58, R = 16, T = 14, B = 42;
+  const xs = all.map((c) => c.p), ys = all.map((c) => c.v);
+  const nice = (lo, hi, n) => { const step = Math.pow(10, Math.floor(Math.log10((hi - lo) / n))); const m = [1, 2, 2.5, 5, 10].find((k) => (hi - lo) / (k * step) <= n) * step; return { lo: Math.floor(lo / m) * m, hi: Math.ceil(hi / m) * m, m }; };
+  const xa = nice(Math.min(...xs), Math.max(...xs), 8), ya = nice(Math.min(...ys), Math.max(...ys), 5);
+  const X = (v) => L + (v - xa.lo) / (xa.hi - xa.lo) * (W - L - R);
+  const Y = (v) => T + (ya.hi - v) / (ya.hi - ya.lo) * (H - T - B);
+  const fitKey = state.group === "SP" ? "SP" : state.group === "RP" ? "RP" : "hitters";
+  const fit = pool().fit[fitKey];
+  let g = "";
+  for (let v = ya.lo; v <= ya.hi + 1e-9; v += ya.m) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${(+v.toFixed(3)).toString()}</text>`;
+  for (let v = xa.lo; v <= xa.hi + 1e-9; v += xa.m) g += `<text x="${X(v)}" y="${H - B + 16}" text-anchor="middle">${Math.round(v)}</text>`;
+  g += `<text class="axis-title" x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle">Points</text>`;
+  g += `<text class="axis-title" transform="translate(13 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle">Value (${unit().v})</text>`;
+  g += `<line class="fit" x1="${X(xa.lo)}" y1="${Y(fit.intercept + fit.slope * xa.lo)}" x2="${X(xa.hi)}" y2="${Y(fit.intercept + fit.slope * xa.hi)}"/>`;
+  const inList = new Set(list);
+  const ordered = [...all].sort((a, b) => inList.has(a) - inList.has(b));
+  for (const c of ordered) {
+    const on = inList.has(c);
+    g += `<circle cx="${X(c.p).toFixed(1)}" cy="${Y(c.v).toFixed(1)}" r="${on ? 4.6 : 3.4}" fill="var(--t-${c.tier})" class="${on ? "" : "dim"}" data-i="${on ? list.indexOf(c) : -1}"><title>${esc(c.n)}: ${c.p} pts, value ${sign(c.v)}, bargain ${sign(c.s)}</title></circle>`;
+  }
+  // Label the 3 best and 2 worst bargains in view.
+  const lab = [...list].sort((a, b) => b.s - a.s);
+  const picks = [...lab.slice(0, 3), ...lab.filter((c) => !c.floor).slice(-2)];
+  const used = [];
+  for (const c of new Set(picks)) {
+    let x = X(c.p) + 7, y = Y(c.v) - 6;
+    const anchor = x > W - 160 ? "end" : "start";
+    if (anchor === "end") x = X(c.p) - 7;
+    while (used.some((u) => Math.abs(u.y - y) < 14 && Math.abs(u.x - x) < 130)) y += 14;
+    used.push({ x, y });
+    g += `<text class="lab" x="${x}" y="${y}" text-anchor="${anchor}">${esc(c.n)}</text>`;
+  }
+  svg.innerHTML = g;
+  $("sc-note").textContent = `Dashed line: what a typical card at that price is worth. Above it is a bargain. Showing ${list.length} of ${all.length} ${isPitchGroup() ? NAMES[state.group] : "hitters"}.`;
+}
+
+function render() {
+  const P = pool(); prepare(P);
+  const all = isPitchGroup() ? members() : P.hitters;
+  let list = members();
+  if (state.q) list = list.filter((c) => c.key.includes(norm(state.q)));
+  const sorter = SORTS[state.sort] && !(SORTS[state.sort].posOnly && (state.group === "All" || isPitchGroup())) ? state.sort : "bargain";
+  list = [...list].sort(SORTS[sorter].fn);
+
+  renderScatter(list, all);
+  $("g-title").textContent = state.q
+    ? `${list.length} ${list.length === 1 ? "match" : "matches"} among ${NAMES[state.group]}`
+    : `${list.length} ${NAMES[state.group]}`;
+  const best = [...list].sort((a, b) => b.s - a.s)[0];
+  $("g-note").textContent = list.length ? `${SORTS[sorter].label}. ${P.label}.` : "";
+  $("grid").innerHTML = list.length ? list.slice(0, shown).map(tile).join("") : `<div class="empty">No ${NAMES[state.group]} match “${esc(state.q)}”.</div>`;
+  $("more").hidden = list.length <= shown;
+  $("more").textContent = `Show ${Math.min(PAGE, list.length - shown)} more`;
+  syncControls(sorter);
+  window.__list = list;
+}
+
+function syncControls(sorter) {
+  $("pool").value = state.pool;
+  $("chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", b.dataset.g === state.group));
+  const sortSel = $("sort");
+  sortSel.innerHTML = Object.entries(SORTS)
+    .filter(([, s]) => !s.posOnly || (state.group !== "All" && !isPitchGroup()))
+    .map(([k, s]) => `<option value="${k}">${isPitchGroup() ? s.label.replace("On-Base / Control", "Control").replace("Speed / IP", "IP") : s.label.replace("On-Base / Control", "On-Base").replace("Speed / IP", "Speed")}</option>`).join("");
+  sortSel.value = sorter;
+}
+
+function init() {
+  $("pool").innerHTML = D.pools.map((p) => `<option value="${p.id}">${esc(p.label)}</option>`).join("");
+  $("chips").innerHTML = HITTER_CHIPS.map((g) => `<button class="chip" data-g="${g}">${g === "All" ? "All hitters" : g}</button>`).join("")
+    + PITCHER_CHIPS.map((g, i) => `<button class="chip${i === 0 ? " sep" : ""}" data-g="${g}">${g}</button>`).join("");
+  $("tier-legend").innerHTML = '<span class="lbl">Bargain tier</span>' + TIERS.map(([t], i) => `<span><i class="sw" style="background:var(--t-${t})"></i>${t} ${["top 5%", "next 15%", "middle 30%", "next 30%", "bottom 20%"][i]}</span>`).join("");
+  $("chart-legend").innerHTML = '<span class="lbl">Chart, faces 1–20</span>' + [["--o-out", "Out (PU, SO, GB, FB)"], ["--o-bb", "Walk"], ["--o-1b", "Single / 1B+"], ["--o-xbh", "Double / triple"], ["--o-hr", "Home run"]].map(([v, l]) => `<span><i class="sw" style="background:var(${v})"></i>${l}</span>`).join("");
+  $("q").value = state.q;
+
+  $("pool").onchange = (e) => { state.pool = e.target.value; shown = PAGE; save(); render(); };
+  $("sort").onchange = (e) => { state.sort = e.target.value; shown = PAGE; save(); render(); };
+  $("q").oninput = (e) => { state.q = e.target.value.trim(); shown = PAGE; save(); render(); };
+  $("chips").onclick = (e) => {
+    const b = e.target.closest(".chip"); if (!b) return;
+    state.group = b.dataset.g; shown = PAGE;
+    if (SORTS[state.sort]?.posOnly && (state.group === "All" || isPitchGroup())) state.sort = "bargain";
+    save(); render();
+  };
+  $("more").onclick = () => { shown += PAGE; render(); };
+  $("scatter").onclick = (e) => {
+    const i = +(e.target.dataset?.i ?? -1);
+    if (!(i >= 0)) return;
+    if (i >= shown) { shown = Math.ceil((i + 1) / PAGE) * PAGE; render(); }
+    const el = $("card-" + i); if (!el) return;
+    el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+    el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600);
+  };
+  render();
+}
+init();
+</script>
