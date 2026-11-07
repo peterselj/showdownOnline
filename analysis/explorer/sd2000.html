@@ -120,6 +120,10 @@ footer p { margin: 0; }
 .usage .bar-u i { display: block; height: 100%; background: var(--accent); }
 .usage .k { font-size: 12px; color: var(--muted); }
 .split { font-size: 11.5px; color: var(--muted); }
+.nm a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); }
+.nm a:hover, .nm a:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
+.vers { font-size: 11.5px; color: var(--muted); }
+.vers a { color: var(--accent); }
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 440px) { .tiles { grid-template-columns: 1fr; } }
@@ -250,6 +254,13 @@ const unit = () => isPitch() ? "runs saved / 9" : "runs / game";
 function tile(c, idx) {
   const pitch = c.grp !== "H";
   const meta = [c.t, c.y].filter(Boolean).join(" · ");
+  const IMG = "https://img.showdown2000.fun/";
+  const imgs = (c.img || []);
+  const vers = String(c.ver || "").split(", ").filter(Boolean);
+  const nameHtml = imgs.length ? `<a href="${IMG}${encodeURI(imgs[0])}?v=5" target="_blank" rel="noopener" title="Open the card on showdown2000.fun">${esc(c.n)}</a>` : esc(c.n);
+  const versHtml = vers.length > 1
+    ? `<div class="vers">${vers.length} versions merged (same printed card): ${vers.map((v, i) => imgs[i] ? `<a href="${IMG}${encodeURI(imgs[i])}?v=5" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)).join(", ")}${c.pr ? ` · ${esc(c.pr)} pts` : ""}</div>`
+    : "";
   const use = Math.min(1, c.tm / Math.max(1, M.teams_total));
   let attrs, line, split;
   if (pitch) {
@@ -265,10 +276,11 @@ function tile(c, idx) {
   return `<article class="card" id="card-${idx}">
     <div class="c-top">
       <div class="cmd" title="${pitch ? "Control" : "On-Base"}"><b>${pitch ? c.ctl : c.ob}</b><small>${pitch ? "CTRL" : "OB"}</small></div>
-      <div class="who"><div class="nm">${esc(c.n)}</div><div class="meta">${esc(meta)}</div></div>
+      <div class="who"><div class="nm">${nameHtml}</div><div class="meta">${esc(meta)}</div></div>
       <div class="pts"><b>${c.p}</b><small>PTS</small></div>
     </div>
     <div class="attrs">${attrs}</div>
+    ${versHtml}
     <div class="usage"><div class="k">Used by <b>${c.tm}</b> team${c.tm === 1 ? "" : "s"} · ${c.g.toLocaleString()} G</div><div class="bar-u" aria-hidden="true"><i style="width:${(use * 100).toFixed(1)}%"></i></div></div>
     <div class="line">${line}</div>
     ${split}
@@ -349,11 +361,11 @@ function init() {
     ["Teams", `${M.teams_total}`, `${pa.toLocaleString()} plate appearances`],
     ["League scoring", `${M.league_runs_per_9}`, "runs per 9 innings"],
     ["A steal is worth", `${sign(rv.SB, 2)}`, `caught stealing ${sign(rv.CS, 2)} runs`],
-    ["A +5 catcher costs", `${sign((M.arm_table || {})["5"] ?? 0, 2)}`, `runs / game vs an average +${(sa.C ?? 0).toFixed(0)} arm; +12 gains only ${sign((M.arm_table || {})["12"] ?? 0, 2)}`],
-    ["+1 infield glove saves", `${(gm.infield ?? 0).toFixed(3)}`, `runs / game; outfield ${(gm.outfield ?? 0).toFixed(3)}`],
+    ["A +5 catcher costs", `${sign((M.arm_table || {})["5"] ?? 0, 2)}`, `runs / game vs the league's catchers; +12 gains ${sign((M.arm_table || {})["12"] ?? 0, 2)}, +14 ${sign((M.arm_table || {})["14"] ?? 0, 2)}`],
+    ["A +0 shortstop costs", `${sign(((M.glove_tables || {}).SS || {})["0"] ?? 0, 2)}`, `runs / game vs an average one; +0 in center ${sign(((M.glove_tables || {}).CF || {})["0"] ?? 0, 2)}`],
   ].map(([k, v, u]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`).join("");
   $("findings").innerHTML = (M.findings || []).map((f) => `<li>${esc(f)}</li>`).join("");
-  $("caveat").textContent = `Stats come from showdown2000.fun's Leaders tables, read ${M.collected || "recently"}, pooled across every team that played each card${M.clean ? `; ${M.flagged_note || "flagged teams are left out"}` : ""}. Only teams with at least ${M.min_ab ?? 40} at-bats (hitters) or ${M.min_ip ?? 10} innings (pitchers) with a card count. Small samples are pulled toward average, so a card needs a few hundred plate appearances before its number means much. The glove part is modeled (the Leaders tables have no fielding stats): infield and outfield points are priced by what one point of team fielding saves in this league, and each catcher arm by how many steals it allows against this league's runners, compared with the average glove at that spot. Pitching value uses hits, walks, strikeouts and home runs allowed.`;
+  $("caveat").textContent = `Stats come from showdown2000.fun's Leaders tables, read ${M.collected || "recently"}, pooled across every team that played each card${M.clean ? `; ${M.flagged_note || "flagged teams are left out"}` : ""}. Only teams with at least ${M.min_ab ?? 40} at-bats (hitters) or ${M.min_ip ?? 10} innings (pitchers) with a card count. Small samples are pulled toward average, so a card needs a few hundred plate appearances before its number means much. The glove part is modeled, since the Leaders tables have no fielding stats. Infield and outfield gloves are priced by what they do to the team total that double plays and throws on the bases are rolled against (the model's double-play rate is matched to the real one). Catcher arms are priced from every real steal attempt, assuming runners only go when the steal pays. Versions of a card that print the same numbers are merged; click a name to open the card. Pitching value uses hits, walks, strikeouts and home runs allowed.`;
   $("foot").innerHTML = `<p>Run values come from the exact game engine, solved for a league built from these games' totals with showdown2000.fun's rules (steals, extra bases, +5 going home and with two outs, stealing 3rd 5 harder). One result is worth: single ${sign(rv["1B"], 2)}, double ${sign(rv["2B"], 2)}, homer ${sign(rv.HR, 2)}, walk ${sign(rv.BB, 2)}, out ${sign(rv.OUT, 2)}, double play ${sign(rv.DP, 2)} extra.</p><p>Bargain = value minus the straight-line fit of value on points within hitters, starters or relievers, weighted by sample size. Tiers: S top 5%, A next 15%, B next 30%, C next 30%, D bottom 20%.</p>`;
   $("chips").innerHTML = HITTER_CHIPS.map((g) => `<button class="chip" data-g="${g}">${g === "All" ? "All hitters" : g}</button>`).join("")
     + ["SP", "RP"].map((g, i) => `<button class="chip${i === 0 ? " sep" : ""}" data-g="${g}">${g}</button>`).join("");

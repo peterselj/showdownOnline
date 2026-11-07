@@ -357,6 +357,31 @@ def running_run_values(env: Env, sol: Solution) -> dict:
     return {k: acc[k] / total_w[k] if total_w[k] else 0.0 for k in acc}
 
 
+def steal_third_run_values(env: Env, sol: Solution) -> dict:
+    """Run value of a steal of 3rd (runner on 2nd, 3rd open): gained if safe, lost if caught."""
+    acc_sb = acc_cs = tw = 0.0
+    for s in NORMAL_STATES:
+        w = sol.visits.get(s, 0.0)
+        o, b1, b2, b3 = _unpack(s)
+        if not w or not b2 or b3:
+            continue
+        safe, out = _state(o, b1, EMPTY, b2), _go(o + 1, b1, EMPTY, EMPTY)
+        acc_sb += w * (sol.W[safe] - sol.W[s])
+        acc_cs += w * ((0.0 if out == END else sol.W[out]) - sol.W[s])
+        tw += w
+    return {"SB3": acc_sb / tw, "CS3": acc_cs / tw} if tw else {"SB3": 0.0, "CS3": 0.0}
+
+
+def dp_per_pa(env: Env, sol: Solution, batter_speed: float | None = None) -> float:
+    """Expected double plays per plate appearance for a batter of this Speed in this league."""
+    spd = env.batter_speed if batter_speed is None else batter_speed
+    p_dp = p_defense_wins(spd, 0, env.infield)
+    p_gb = env.probs[E["GB"]]
+    total = sum(sol.visits.values())
+    on_first = sum(w for s, w in sol.visits.items() if _unpack(s)[1] and _unpack(s)[0] < 2)
+    return p_gb * p_dp * on_first / total
+
+
 def steal_rate(env: Env, sol: Solution, speed: float) -> dict:
     """How often a runner of this Speed steals: attempts and successes per time he's on 1st/2nd."""
     tagged = solve(replace(env, tag_speed=float(speed), allow_steals=True))

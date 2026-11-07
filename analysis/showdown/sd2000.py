@@ -75,7 +75,36 @@ def parse_positions(text: str) -> list[tuple[str, int]]:
     return out
 
 
-def load_hitters() -> pd.DataFrame:
+def pool_versions(df: pd.DataFrame, same: list[str], stats: list[str], size: str) -> pd.DataFrame:
+    """Merge versions of one player-season (base, career, lumber, refractor...) that print the same
+    card numbers (`same`), adding up their game stats. Versions with different printed numbers
+    (e.g. an All-Star version with more Speed) stay separate cards.
+
+    The merged card keeps the points, tag and team count of its most-played version; `versions`
+    lists every version and `points_range` the spread of their prices (usually none). Team counts
+    are added up, so a team that used two versions counts twice.
+    """
+    df = df.copy()
+    df["_tag"] = df["tag"].replace("", "base")
+    keys = ["name", "year", "team"] + same
+    rows = []
+    for _, g in df.groupby(keys, sort=False, dropna=False):
+        g = g.sort_values(size, ascending=False)
+        top = g.iloc[0].copy()
+        for c in stats:
+            top[c] = g[c].sum()
+        top["versions"] = ", ".join(g["_tag"])
+        top["version_tags"] = "|".join(g["tag"])
+        top["n_versions"] = len(g)
+        lo, hi = int(g["points"].min()), int(g["points"].max())
+        top["points_range"] = "" if lo == hi else f"{lo}-{hi}"
+        rows.append(top)
+    out = pd.DataFrame(rows).drop(columns="_tag").reset_index(drop=True)
+    out["key"] = out["name"] + "|" + out["year"].astype(str) + "|" + out["team"] + "|" + out["tag"]
+    return out
+
+
+def load_hitters(pool: bool = True) -> pd.DataFrame:
     """Hitter cards with their pooled batting stats (flagged teams already left out)."""
     df = _read("hitters", HITTER_COLS)
     sp = df["speed"].astype(str).str.upper()
@@ -85,26 +114,38 @@ def load_hitters() -> pd.DataFrame:
     df["SF"] = df["SH"] = 0      # always 0 in the Leaders tables
     df["PA"] = df["AB"] + df["BB"] + df["SF"] + df["SH"]
     df["1B"] = df["H"] - df["2B"] - df["3B"] - df["HR"]
+    if pool:
+        df = pool_versions(df, ["command", "speed", "positions"],
+                           ["teams", "G", "AB", "H", "2B", "3B", "HR", "SB", "CS", "BB", "SO", "DP",
+                            "SF", "SH", "PA", "1B"], size="PA")
     return df
 
 
-def load_pitchers() -> pd.DataFrame:
+def load_pitchers(pool: bool = True) -> pd.DataFrame:
     """Pitcher cards (role Starter / Reliever / Closer) with their pooled pitching stats."""
     df = _read("pitchers", PITCHER_COLS)
     df["is_pitcher"] = True
     df["G"] = df["GS"]          # the Leaders table's G column is always 0 for pitchers; GS is real
+    if pool:
+        df = pool_versions(df, ["command", "ip", "role"],
+                           ["teams", "G", "GS", "IP", "W", "L", "SV", "H", "R", "ER", "BB", "SO", "HR"],
+                           size="IP")
     return df
 
 
 # ---------------------------------------------------------------------------------------------
 # Batting
 # ---------------------------------------------------------------------------------------------
-def league_env(bat: pd.DataFrame) -> Env:
-    """A league built from the pooled game totals."""
+def league_env(bat: pd.DataFrame, gb_share: float = 0.5) -> Env:
+    """A league built from the pooled game totals.
+
+    The Leaders tables don't split outs into grounders and fly balls; `gb_share` is the share of
+    non-strikeout outs that are grounders (calibrate_gb_share picks it to match real double plays).
+    """
     t = bat[["PA", "AB", "H", "1B", "2B", "3B", "HR", "BB", "SO", "SF", "SH"]].sum()
     other_outs = t["AB"] - t["H"] - t["SO"] + t["SF"] + t["SH"]
     probs = dict.fromkeys(EVENTS, 0.0)
-    probs.update({"SO": t["SO"], "GB": other_outs / 2, "FB": other_outs / 2, "BB": t["BB"],
+    probs.update({"SO": t["SO"], "GB": other_outs * gb_share, "FB": other_outs * (1 - gb_share), "BB": t["BB"],
                   "1B": t["1B"], "2B": t["2B"], "3B": t["3B"], "HR": t["HR"]})
     p = np.array([probs[e] for e in EVENTS], float)
     p /= p.sum()
@@ -139,10 +180,42 @@ def _pos_list(posstr: str) -> list[tuple[str, int]]:
     return out
 
 
+def calibrate_gb_share(bat: pd.DataFrame) -> tuple[float, pd.DataFrame]:
+    """Find the grounder share at which the engine's double-play rate matches the real one.
+
+    Returns the share and a table of real vs modelled double plays per plate appearance by Speed.
+    """
+    from .engine import dp_per_pa
+    real = bat["DP"].sum() / bat["PA"].sum()
+    shares = _speed_shares(bat["speed"].fillna(15), bat["PA"])
+
+    def model(g):
+        env = league_env(bat, g)
+        sol = solve(env)
+        return sum(w * dp_per_pa(env, sol, sp) for sp, w in shares.items()), env, sol
+
+    lo, hi = 0.1, 0.9
+    for _ in range(25):
+        mid = (lo + hi) / 2
+        if model(mid)[0] > real:
+            hi = mid
+        else:
+            lo = mid
+    g = (lo + hi) / 2
+    _, env, sol = model(g)
+    buckets = pd.cut(bat["speed"], [0, 11, 13, 15, 17, 19, 21, 30])
+    tab = bat.groupby(buckets, observed=True).agg(speed=("speed", "mean"), DP=("DP", "sum"), PA=("PA", "sum"))
+    tab["real_dp_per_pa"] = tab["DP"] / tab["PA"]
+    tab["model_dp_per_pa"] = [dp_per_pa(env, sol, sp) for sp in tab["speed"]]
+    return g, tab
+
+
 def run_values(env: Env) -> dict:
+    from .engine import steal_third_run_values
     sol = solve(env)
     rv = dict(zip(EVENTS, event_run_values(env, sol)))
     rv.update(running_run_values(env, sol))
+    rv.update(steal_third_run_values(env, sol))
     rv["OUT"] = (rv["GB"] + rv["FB"]) / 2
     rv["runs_per_9"] = sol.runs_per_9
     rv["pa_per_inning"] = sol.pa_per_inning
@@ -169,62 +242,157 @@ def value_batting(bat: pd.DataFrame, rv: dict) -> pd.DataFrame:
     return df
 
 
-def fielding_marginals(env: Env, speeds: pd.Series, weights: pd.Series) -> dict:
-    """Runs per game one more point of team fielding saves, at each kind of spot.
-
-    Fast runners steal and take extra bases; slow ones don't. So we average over lineups of
-    every Speed in the league, weighted by how much each Speed actually plays.
-    """
-    from dataclasses import replace
-    w = _speed_shares(speeds, weights)
-    out = {"infield": 0.0, "outfield": 0.0, "catcher": 0.0}
-    for spd, share in w.items():
-        e = replace(env, batter_speed=float(spd), runner_speed=float(spd))
-        for name, field in (("infield", "infield"), ("outfield", "outfield"), ("catcher", "catcher_arm")):
-            lo = solve(replace(e, **{field: getattr(e, field) - 1})).runs_per_9
-            hi = solve(replace(e, **{field: getattr(e, field) + 1})).runs_per_9
-            out[name] += share * (lo - hi) / 2
-    return out
-
-
 def _speed_shares(speeds: pd.Series, weights: pd.Series) -> pd.Series:
     w = weights.groupby(speeds.round()).sum()
     return w / w.sum()
 
 
-def catcher_arm_table(env: Env, speeds: pd.Series, weights: pd.Series, arms=range(0, 17)) -> dict:
-    """Runs per game a catcher with each arm saves compared with the league-average arm.
+SPOTS = ("C", "1B", "2B", "3B", "SS", "LF/RF", "CF")
+INFIELD = ("1B", "2B", "3B", "SS")
+OUTFIELD = ("LF/RF", "CF")
 
-    Not a straight line: against a +10 arm only the very fastest runners steal, so one more point
-    barely matters; drop to +5 and Speed-20 runners start running freely. So each arm is priced
-    directly, averaging over lineups of every Speed weighted by how much that Speed plays.
+
+def spot_averages(bat: pd.DataFrame) -> dict:
+    """Average glove of the players who actually play each spot (weighted by plate appearances)."""
+    out = {}
+    for spot in SPOTS:
+        vals, wts = [], []
+        for pos, pa in zip(bat["positions"], bat["PA"]):
+            f = max((f for p, f in _pos_list(pos) if p == spot), default=None)
+            if f is not None:
+                vals.append(f)
+                wts.append(pa)
+        out[spot] = float(np.average(vals, weights=wts)) if vals else 0.0
+    return out
+
+
+def team_glove_tables(env: Env, bat: pd.DataFrame, spot_avg: dict, values=range(0, 9)) -> dict:
+    """Runs per game an infielder or outfielder with each glove saves vs the average glove there.
+
+    A fielder's number is never rolled alone: double plays roll d20 + the four infielders' total
+    against the batter's Speed, and throws on sends and tag-ups roll d20 + the three outfielders'
+    total against the runner's Speed (+5 going home, +5 with two outs). So a player's glove is
+    worth what it does to that team total, with the other spots average. Each glove is priced by
+    solving the whole league at that total (the offense only sends a runner when it pays), averaged
+    over lineups of every Speed weighted by how much that Speed plays. It is not a fixed amount
+    per point: once the total beats a runner's Speed on every roll, more glove does nothing.
     """
     from dataclasses import replace
-    shares = _speed_shares(speeds, weights)
-    def runs_allowed(arm: float) -> float:
-        return sum(share * solve(replace(env, batter_speed=float(spd), runner_speed=float(spd),
-                                         catcher_arm=float(arm))).runs_per_9
-                   for spd, share in shares.items())
-    base = runs_allowed(env.catcher_arm)
-    return {int(a): base - runs_allowed(a) for a in arms}
+    shares = _speed_shares(bat["speed"].fillna(15), bat["PA"])
+    cache = {}
+
+    def runs(field, total):
+        k = (field, round(total, 4))
+        if k not in cache:
+            cache[k] = sum(w * solve(replace(env, batter_speed=float(sp), runner_speed=float(sp),
+                                             **{field: total})).runs_per_9 for sp, w in shares.items())
+        return cache[k]
+
+    out = {}
+    for spot in INFIELD + OUTFIELD:
+        field = "infield" if spot in INFIELD else "outfield"
+        base_total = getattr(env, field)
+        base = runs(field, base_total)
+        out[spot] = {int(f): base - runs(field, base_total + f - spot_avg[spot]) for f in values}
+    return out
 
 
-def glove_runs(positions: str, spot_avg: dict, marg: dict, arm_table: dict | None = None) -> dict:
+def steal_model(bat: pd.DataFrame, rv: dict, pa_per_game: float, q_third: float = 0.15,
+                arms=range(0, 17), max_boost: float = 4.0) -> dict:
+    """What a catcher's arm is worth, from the steal attempts runners actually made.
+
+    Rule (showdown2000.fun): the catcher rolls d20 + arm; the runner is out if that beats his
+    Speed; stealing 3rd is 5 harder. The Leaders table doesn't split steals of 2nd and 3rd, so
+    `q_third` of attempts are assumed to be steals of 3rd.
+
+    Two answers, both in runs per team-game compared with the league's real mix of catcher arms:
+      fixed  every real attempt still happens against this catcher; only the success rate
+             changes. Simple, but ignores that runners stop running against a strong arm.
+      deter  runners only go when the steal pays: when they are at least T likely to make it
+             against that catcher, T being the break-even success rate (about 75% here). Real
+             runners succeed 75-85% of the time, so they behave close to this. Each runner keeps
+             his real eagerness: against a catcher he can run on he goes as often as he did when
+             the steal was on, at most `max_boost` times his real rate. Attempts by runners who
+             should never go against any catcher in use (slow runners) are kept as they were.
+    """
+    df = bat.copy()
+    df["opp"] = df["1B"] + df["BB"]                      # times on first (singles + walks)
+    df["att"] = df["SB"] + df["CS"]
+    cat = df[df["positions"].str.match(r"^C\+")].copy()
+    cat["arm"] = cat["positions"].str.extract(r"^C\+(\d+)")[0].astype(int)
+    mix = cat.groupby("arm")["PA"].sum()
+    mix = mix / mix.sum()
+    arms_in_use = mix.index.to_numpy(float)
+    w_mix = mix.to_numpy(float)
+
+    def p_safe(sp, a):
+        p2 = np.clip((sp - a) / 20, 0, 1)
+        p3 = np.clip((sp - 5 - a) / 20, 0, 1)
+        return (1 - q_third) * p2 + q_third * p3
+
+    def ev(sp, a):                                        # runs per attempt
+        p2 = np.clip((sp - a) / 20, 0, 1)
+        p3 = np.clip((sp - 5 - a) / 20, 0, 1)
+        return ((1 - q_third) * (p2 * rv["SB"] + (1 - p2) * rv["CS"])
+                + q_third * (p3 * rv["SB3"] + (1 - p3) * rv["CS3"]))
+
+    sp = df["speed"].fillna(15).to_numpy(float)
+    att, opp = df["att"].to_numpy(float), df["opp"].to_numpy(float)
+    ps = p_safe(sp[:, None], arms_in_use[None, :])       # [cards, arms]
+
+    def fit(T):
+        on = (ps >= T).astype(float)
+        on_share = on @ w_mix
+        pred = np.where(on_share > 0, (on * ps) @ w_mix / np.maximum(on_share, 1e-9), ps @ w_mix)
+        return on_share, pred
+
+    # break-even success rate, blending steals of 2nd and 3rd
+    gain = (1 - q_third) * rv["SB"] + q_third * rv["SB3"]
+    loss = -((1 - q_third) * rv["CS"] + q_third * rv["CS3"])
+    T = round(float(loss / (gain + loss)), 3)
+    on_share, pred = fit(T)
+    boost = 1 / np.maximum(on_share, 1 / max_boost)       # how much more often he goes when it's on
+    always = np.where(on_share > 0, 0.0, att)
+    games = df["PA"].sum() / pa_per_game                 # team-games in this sample
+
+    def runs_fixed(a):
+        return float(np.sum(att * ev(sp, a))) / games
+
+    def runs_deter(a):
+        n = np.where(on_share > 0, att * boost * (p_safe(sp, a) >= T), always)
+        return float(np.sum(n * ev(sp, a))) / games
+
+    avg_fixed = sum(w * runs_fixed(a) for a, w in mix.items())
+    avg_deter = sum(w * runs_deter(a) for a, w in mix.items())
+    df["pred_succ"] = pred
+    buckets = pd.cut(df["speed"], [0, 13, 16, 18, 20, 22, 24, 30])
+    rows = []
+    for b_, g in df.groupby(buckets, observed=True):
+        rows.append({"speed": str(b_), "attempts": int(g["att"].sum()),
+                     "attempts_per_time_on_1st": g["att"].sum() / g["opp"].sum(),
+                     "real_success": g["SB"].sum() / max(g["att"].sum(), 1),
+                     "model_success": float(np.average(g["pred_succ"], weights=np.maximum(g["att"], 1e-9)))})
+    return {
+        "T": T, "q_third": q_third, "arm_mix": {int(k): float(v) for k, v in mix.items()},
+        "fixed": {int(a): avg_fixed - runs_fixed(a) for a in arms},
+        "deter": {int(a): avg_deter - runs_deter(a) for a in arms},
+        "check": pd.DataFrame(rows),
+        "steal_runs_per_game": avg_fixed,
+    }
+
+
+def glove_runs(positions: str, tables: dict) -> dict:
     """Runs per game this card's glove saves at each spot it plays, vs the average glove there.
 
-    Infield and outfield count toward team totals (sum of 4 or 3 players), so a point is a point;
-    a catcher's arm uses `arm_table` (see catcher_arm_table) when given.
+    `tables[spot][value]` comes from team_glove_tables (infield, outfield) and steal_model
+    (catcher). Values past the end of a table use its nearest entry.
     """
-    kind = {"C": "catcher", "1B": "infield", "2B": "infield", "3B": "infield", "SS": "infield",
-            "LF/RF": "outfield", "CF": "outfield"}
     out = {}
     for p, f in _pos_list(positions):
-        if p not in kind:
+        t = tables.get(p)
+        if not t:
             continue
-        if p == "C" and arm_table:
-            v = arm_table.get(int(f), arm_table[max(arm_table)] if f > max(arm_table) else arm_table[min(arm_table)])
-        else:
-            v = (f - spot_avg[p]) * marg[kind[p]]
+        v = t.get(int(f), t[max(t)] if f > max(t) else t[min(t)])
         out[p] = max(out.get(p, -99), v)
     return out
 
