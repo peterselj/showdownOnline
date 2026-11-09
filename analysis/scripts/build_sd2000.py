@@ -158,6 +158,12 @@ def main() -> None:
     hb["weight"] = hb["trust"]
     hfit = fit(hb, "value")
     hb["surplus"] = hb["value"] - (hfit["intercept"] + hfit["slope"] * hb["points"])
+    # unadjusted: each card's own results as played, priced against a line fit to those results
+    hb["raa_per_game_raw"] = hb["raa_pa"] * rv["pa_per_inning"]
+    hb["value_raw"] = hb["raa_per_game_raw"] + hb["glove_primary"]
+    raw_w = hb[["points", "value_raw"]].assign(weight=hb["PA"])
+    hfit_raw = fit(raw_w, "value_raw")
+    hb["surplus_raw"] = hb["value_raw"] - (hfit_raw["intercept"] + hfit_raw["slope"] * hb["points"])
 
     # ---- pitchers ----
     pv = sd2000.value_pitching(pit, rv)
@@ -173,6 +179,12 @@ def main() -> None:
     for staff, g in pv.groupby("staff"):
         pfits[staff] = fit(g, "runs_saved_per_9")
         pv.loc[g.index, "surplus"] = g["runs_saved_per_9"] - (pfits[staff]["intercept"] + pfits[staff]["slope"] * g["points"])
+    pv["runs_saved_per_9_raw"] = -pv["runs_vs_avg"] / pv["BF"] * rv["pa_per_inning"] * 9
+    pfits_raw = {}
+    for staff, g in pv.groupby("staff"):
+        pfits_raw[staff] = fit(g[["points", "runs_saved_per_9_raw"]].assign(weight=g["BF"]), "runs_saved_per_9_raw")
+        pv.loc[g.index, "surplus_raw"] = g["runs_saved_per_9_raw"] - (
+            pfits_raw[staff]["intercept"] + pfits_raw[staff]["slope"] * g["points"])
 
     OUT.mkdir(exist_ok=True)
     hb.drop(columns=["glove"]).sort_values("surplus", ascending=False).to_csv(OUT / "sd2000_hitters.csv", index=False)
@@ -186,7 +198,7 @@ def main() -> None:
         "sp": None if pd.isna(x["speed"]) else int(x["speed"]), "pos": x["positions"],
         "tm": int(x["teams"]), "g": int(x["G"]), "pa": int(x["PA"]), "hr": int(x["HR"]), "sb": int(x["SB"]),
         "cs": int(x["CS"]), "dp": int(x["DP"]), "bb": int(x["BB"]), "so": int(x["SO"]),
-        "obp": r(x["obp"], 3), "slg": r(x["slg"], 3), "bat": r(x["raa_per_game"]), "run": r(x["running_runs"] / max(x["G"], 1)),
+        "obp": r(x["obp"], 3), "slg": r(x["slg"], 3), "bat": r(x["raa_per_game"]), "braw": r(x["raa_per_game_raw"]), "sraw": r(x["surplus_raw"]), "run": r(x["running_runs"] / max(x["G"], 1)),
         "gl": {k: r(v) for k, v in x["glove"].items()}, "v": r(x["value"]), "s": r(x["surplus"]),
         "ver": x["versions"], "pr": x["points_range"], "img": card_images(x, "HITTER"), "tr": r(x["trust"], 2),
     } for _, x in hb.iterrows()]
@@ -196,6 +208,7 @@ def main() -> None:
         "g": int(x["G"]), "gs": int(x["GS"]), "ipt": r(x["IP"], 1), "era": r(x["era"], 2),
         "whip": r((x["H"] + x["BB"]) / x["IP"] if x["IP"] else np.nan, 3), "k9": r(x["SO"] * 9 / x["IP"] if x["IP"] else np.nan, 2),
         "bf": int(x["BF"]), "v": r(x["runs_saved_per_9"]), "s": r(x["surplus"]),
+        "vraw": r(x["runs_saved_per_9_raw"]), "sraw": r(x["surplus_raw"]),
         "ver": x["versions"], "pr": x["points_range"], "img": card_images(x, "PITCHER"), "tr": r(x["trust"], 2),
     } for _, x in pv.iterrows()]
     findings = make_findings(hb, pv, rv, tables, steals, gb_share)
@@ -212,7 +225,8 @@ def main() -> None:
                  "findings": findings,
                  "spot_avg": {k: round(v, 2) for k, v in spot_avg.items()},
                  "catalog_cards": int(sd2000.read_meta().get("catalog_cards", 0))},
-        "fit": {"hitters": hfit, **pfits}, "hitters": hitters, "pitchers": pitchers,
+        "fit": {"hitters": hfit, **pfits}, "fit_raw": {"hitters": hfit_raw, **pfits_raw},
+        "hitters": hitters, "pitchers": pitchers,
     }
     blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
     html = (ROOT / "explorer" / "sd2000.html").read_text(encoding="utf-8").replace("__DATA__", blob)

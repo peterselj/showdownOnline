@@ -85,7 +85,9 @@ price are about 0.017. Each card keeps
 of its difference from the price line, and the page shows that weight as "own results count".
 A one-team card with 650 PA keeps about 15%; a card with 2,000+ PA across 8+ teams about half;
 Bonds 1989 (7,531 PA, 22 teams) 76%. Pitchers work the same way (by batters faced), with
-separate price lines for starters and relievers. The page also has a minimum-teams filter.
+separate price lines for starters and relievers. The page also has a minimum-teams filter, and
+a "Sample adjustment" switch that turns this off to show each card's raw results as played
+(bargains then measured against a price line fit to the raw results).
 
 ### How fielding is valued
 

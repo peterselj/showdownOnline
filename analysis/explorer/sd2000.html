@@ -155,6 +155,7 @@ footer p { margin: 0; }
     <div class="ctl"><span class="lbl">Position</span><div class="chips" id="chips" role="group" aria-label="Position"></div></div>
     <div class="ctl"><label for="sort">Sort</label><select id="sort"></select></div>
     <div class="ctl"><label for="minpa" class="lbl" id="minlbl">Min PA</label><select id="minpa"></select></div>
+    <div class="ctl"><label class="lbl" for="adjust">Sample adjustment</label><button type="button" class="chip" id="adjust" aria-pressed="true" title="On: each card is pulled toward what cards at its price do, trusting its own results by plate appearances and teams. Off: each card's raw results as played.">On</button></div>
     <div class="ctl"><label for="minteams" class="lbl">Min teams</label><select id="minteams"><option value="1">Any</option><option value="2">2</option><option value="5">5</option><option value="10">10</option><option value="20">20</option></select></div>
     <div class="ctl search"><label for="q" class="lbl">Find</label><input id="q" type="search" placeholder="Player name" autocomplete="off"></div>
   </div>
@@ -205,7 +206,7 @@ const SORTS = {
   k9: { label: "K / 9", fn: (a, b) => (b.k9 ?? 0) - (a.k9 ?? 0), p: true },
 };
 
-let state = { group: "All", sort: "bargain", q: "", min: 500, minTeams: 1 };
+let state = { group: "All", sort: "bargain", q: "", min: 500, minTeams: 1, raw: false };
 try { Object.assign(state, JSON.parse(localStorage.getItem("sd2000-results-v2") || "{}")); } catch (e) {}
 const save = () => { try { localStorage.setItem("sd2000-results-v2", JSON.stringify(state)); } catch (e) {} };
 const PAGE = 60;
@@ -222,10 +223,13 @@ const parsePos = (s) => String(s || "").split(",").map((x) => x.trim()).filter(B
 (function prepare() {
   const groups = { H: D.hitters, SP: D.pitchers.filter((p) => p.role === "Starter"), RP: D.pitchers.filter((p) => p.role !== "Starter") };
   for (const [g, list] of Object.entries(groups)) {
+    [...list].sort((a, b) => (b.sraw ?? b.s) - (a.sraw ?? a.s)).forEach((c, i, arr) => {
+      c.tierRaw = TIERS.find(([, cut]) => i / arr.length < cut)[0]; c.rankRaw = i + 1;
+    });
     const ranked = [...list].sort((a, b) => b.s - a.s);
     ranked.forEach((c, i) => {
       c.grp = g; c.rank = i + 1; c.of = ranked.length; c.key = norm(c.n);
-      c.tier = TIERS.find(([, cut]) => i / ranked.length < cut)[0];
+      c.tierAdj = c.tier = TIERS.find(([, cut]) => i / ranked.length < cut)[0]; c.rankAdj = c.rank;
       if (g === "H") { c.posList = parsePos(c.pos); c.spots = new Set(c.posList.map((p) => p.pos)); }
     });
   }
@@ -238,14 +242,21 @@ function members() {
   else if (state.group === "RP") list = D.pitchers.filter((c) => c.role !== "Starter");
   else if (state.group === "All") list = D.hitters;
   else list = D.hitters.filter((c) => c.spots.has(state.group));
-  const fit = isPitch() ? D.fit[state.group] : D.fit.hitters;
+  const fits = state.raw ? (D.fit_raw || D.fit) : D.fit;
+  const fit = isPitch() ? fits[state.group] : fits.hitters;
   for (const c of list) {
+    const bat = state.raw ? (c.braw ?? c.bat) : c.bat;
     if (c.grp === "H" && state.group !== "All") {
       const gl = c.gl[state.group];
       c.glv = gl ?? (state.group === "DH" ? 0 : null);
-      c.v_ = c.bat + (gl ?? 0);
-    } else { c.glv = c.grp === "H" ? (c.gl[c.posList[0]?.pos] ?? 0) : null; c.v_ = c.v; }
+      c.v_ = bat + (gl ?? 0);
+    } else if (c.grp === "H") {
+      c.glv = c.gl[c.posList[0]?.pos] ?? 0;
+      c.v_ = bat + c.glv;
+    } else { c.glv = null; c.v_ = state.raw ? (c.vraw ?? c.v) : c.v; }
     c.s_ = c.v_ - (fit.intercept + fit.slope * c.p);
+    c.tier = state.raw ? c.tierRaw : c.tierAdj;
+    c.rank = state.raw ? c.rankRaw : c.rankAdj;
   }
   return list.filter((c) => c[minKey] >= state.min && c.tm >= (state.minTeams || 1));
 }
@@ -272,7 +283,7 @@ function tile(c, idx) {
     attrs = c.posList.map((p) => `<span class="tag${state.group === p.pos ? " hi" : ""}">${esc(p.pos)}${p.pos === "DH" ? "" : " +" + p.f}</span>`).join("") + (c.sp != null ? `<span class="tag">Speed ${c.sp}</span>` : "");
     line = `<span><b>${c.pa.toLocaleString()}</b> PA</span><span>OBP <b>${f3(c.obp)}</b></span><span>SLG <b>${f3(c.slg)}</b></span><span>HR <b>${c.hr}</b></span><span>SB <b>${c.sb}</b>/${c.sb + c.cs}</span><span>DP <b>${c.dp}</b></span>`;
     const gl = state.group === "All" ? c.glv : c.gl[state.group];
-    split = `<div class="split">Bat + run ${sign(c.bat)} · Glove ${gl == null ? "n/a here" : sign(gl)} (model)</div>`;
+    split = `<div class="split">Bat + run ${sign(state.raw ? (c.braw ?? c.bat) : c.bat)} · Glove ${gl == null ? "n/a here" : sign(gl)} (model)</div>`;
   }
   return `<article class="card" id="card-${idx}">
     <div class="c-top">
@@ -282,7 +293,7 @@ function tile(c, idx) {
     </div>
     <div class="attrs">${attrs}</div>
     ${versHtml}
-    <div class="usage"><div class="k">Used by <b>${c.tm}</b> team${c.tm === 1 ? "" : "s"} · ${c.g.toLocaleString()} G${c.tr != null ? ` · <span title="How much this card's own results count; the rest is what cards at its price usually do. More plate appearances and more teams mean more trust.">own results count ${Math.round(c.tr * 100)}%</span>` : ""}</div><div class="bar-u" aria-hidden="true"><i style="width:${(use * 100).toFixed(1)}%"></i></div></div>
+    <div class="usage"><div class="k">Used by <b>${c.tm}</b> team${c.tm === 1 ? "" : "s"} · ${c.g.toLocaleString()} G${state.raw ? " · raw results" : (c.tr != null ? ` · <span title="How much this card's own results count; the rest is what cards at its price usually do. More plate appearances and more teams mean more trust.">own results count ${Math.round(c.tr * 100)}%</span>` : "")}</div><div class="bar-u" aria-hidden="true"><i style="width:${(use * 100).toFixed(1)}%"></i></div></div>
     <div class="line">${line}</div>
     ${split}
     <div class="stats">
@@ -304,7 +315,8 @@ function renderScatter(list) {
   const xa = nice(Math.min(...xs), Math.max(...xs), 8), ya = nice(ylo, yhi, 5);
   const X = (v) => L + (v - xa.lo) / (xa.hi - xa.lo) * (W - L - R);
   const Y = (v) => T + (ya.hi - Math.max(ya.lo, Math.min(ya.hi, v))) / (ya.hi - ya.lo) * (H - T - B);
-  const fit = isPitch() ? D.fit[state.group] : D.fit.hitters;
+  const fits = state.raw ? (D.fit_raw || D.fit) : D.fit;
+  const fit = isPitch() ? fits[state.group] : fits.hitters;
   let g = "";
   for (let v = ya.lo; v <= ya.hi + 1e-9; v += ya.m) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${+v.toFixed(3)}</text>`;
   for (let v = xa.lo; v <= xa.hi + 1e-9; v += xa.m) g += `<text x="${X(v)}" y="${H - B + 16}" text-anchor="middle">${Math.round(v)}</text>`;
@@ -338,7 +350,7 @@ function render() {
   list = [...list].sort(SORTS[sorter].fn);
   renderScatter(list);
   $("g-title").textContent = `${list.length} ${NAMES[state.group]}`;
-  $("g-note").textContent = `${SORTS[sorter].label}. At least ${state.min} ${isPitch() ? "batters faced" : "plate appearances"}${state.minTeams > 1 ? ` and ${state.minTeams} teams` : ""}.`;
+  $("g-note").textContent = `${SORTS[sorter].label}. At least ${state.min} ${isPitch() ? "batters faced" : "plate appearances"}${state.minTeams > 1 ? ` and ${state.minTeams} teams` : ""}. ${state.raw ? "Raw results, no sample adjustment." : "Adjusted for sample size and teams."}`;
   $("grid").innerHTML = list.length ? list.slice(0, shown).map(tile).join("") : `<div class="empty">No ${NAMES[state.group]} match.</div>`;
   $("more").hidden = list.length <= shown;
   $("more").textContent = `Show ${Math.min(PAGE, list.length - shown)} more`;
@@ -352,6 +364,8 @@ function render() {
   $("minpa").innerHTML = (isPitch() ? MIN_BF : MIN_PA).map((v) => `<option value="${v}">${v || "Any"}</option>`).join("");
   $("minpa").value = String(state.min);
   $("minteams").value = String(state.minTeams || 1);
+  $("adjust").setAttribute("aria-pressed", String(!state.raw));
+  $("adjust").textContent = state.raw ? "Off" : "On";
 }
 
 function init() {
@@ -376,6 +390,7 @@ function init() {
   $("sort").onchange = (e) => { state.sort = e.target.value; shown = PAGE; save(); render(); };
   $("minpa").onchange = (e) => { state.min = +e.target.value; shown = PAGE; save(); render(); };
   $("minteams").onchange = (e) => { state.minTeams = +e.target.value; shown = PAGE; save(); render(); };
+  $("adjust").onclick = () => { state.raw = !state.raw; shown = PAGE; save(); render(); };
   $("q").oninput = (e) => { state.q = e.target.value.trim(); shown = PAGE; save(); render(); };
   $("chips").onclick = (e) => { const b = e.target.closest(".chip"); if (!b) return; state.group = b.dataset.g; shown = PAGE; save(); render(); };
   $("more").onclick = () => { shown += PAGE; render(); };
