@@ -193,6 +193,22 @@ def main() -> None:
     out = OUT / "showdown2000-explorer.html"
     out.write_text(html, encoding="utf-8")
 
+    # Public copy for GitHub Pages: a complete HTML document, without other players' team names.
+    public = json.loads(json.dumps(data))
+    public["meta"].pop("flagged", None)
+    pblob = json.dumps(public, separators=(",", ":")).replace("</", "<\\/")
+    page = (ROOT / "explorer" / "sd2000.html").read_text(encoding="utf-8").replace("__DATA__", pblob)
+    page = page.replace('<meta charset="utf-8">\n', "", 1)
+    site = OUT / "site"
+    site.mkdir(exist_ok=True)
+    (site / "index.html").write_text(
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n"
+        "<meta name=\"description\" content=\"showdown2000.fun cards valued from real games: usage, pooled stats, "
+        "runs added per game, and bargains vs points.\">\n"
+        "<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>\n"
+        + page + "\n</html>\n", encoding="utf-8")
+
     print(f"League: {rv['runs_per_9']:.2f} runs/9; run values " + ", ".join(f"{k} {rv[k]:+.3f}" for k in ("1B", "2B", "HR", "BB", "OUT", "SB", "CS", "DP")))
     print(f"Grounder share calibrated to real double plays: {gb_share:.3f}")
     print(dp_check[["speed", "real_dp_per_pa", "model_dp_per_pa"]].round(4).to_string())

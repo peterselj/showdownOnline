@@ -4,7 +4,8 @@ Which MLB Showdown cards give the most for their points? This folder holds the m
 that, separate from the tabletop app in the rest of the repo.
 
 The main result is for **showdown2000.fun**, valued from real games played there:
-[card explorer](https://claude.ai/artifact/EfvbFLfN1pzo8ZsrhbqawU) (private until shared).
+**https://peterselj.github.io/showdown2000analysis/** (public; the site's repo is
+[peterselj/showdown2000analysis](https://github.com/peterselj/showdown2000analysis)).
 The same engine also values the original 2000 set and Showdown Bot's 2004/05 cards from their charts.
 
 ## What's here
@@ -14,6 +15,7 @@ The same engine also values the original 2000 set and Showdown Bot's 2004/05 car
 | `showdown/engine.py` | The game engine. Treats a half-inning as a Markov chain over the base/out states and solves it exactly, so there's no dice noise. Steals, extra bases and double plays use runner Speed vs catcher arm / outfield / infield, with the best choice made for the offense. One "tagged" runner can have his own Speed, so a batter's Speed counts for as long as he's on base. |
 | `showdown/sd2000.py` | showdown2000.fun: loads its cards with their pooled game stats, builds a league from those games, and turns results into runs (batting, running, pitching), plus a modeled glove and a catcher-arm curve. |
 | `scripts/build_sd2000.py` | Values every showdown2000.fun card and builds the explorer page (`explorer/sd2000.html` -> `results/showdown2000-explorer.html`). Prints the headline findings and the checks (double plays and steals by Speed). |
+| `scripts/publish_site.py` | Copies the built page (without other players' team names) to the public site repo and pushes it to GitHub Pages. |
 | `scripts/check_card_images.py` | Confirms which card pictures exist on img.showdown2000.fun, so the page never links a missing one. |
 | `showdown/cards.py` | Loads the original 2000 Wizards of the Coast set (612 cards) from two fan datasets and cross-checks them card by card. |
 | `showdown/sbcards.py` | Loads Showdown Bot's 2004/2005 cards (what the tabletop app builds) for one MLB season into the same format. |
@@ -30,6 +32,7 @@ pip install -r requirements.txt
 python -m pytest -q
 python scripts/build_sd2000.py       # showdown2000.fun results + page (~2 minutes); needs the data below
 python scripts/check_card_images.py  # which card pictures exist (~10 minutes; run before the build)
+python scripts/publish_site.py       # push the page to GitHub Pages (after the build)
 python scripts/fetch_data.py         # 2000 set (pinned versions)
 python scripts/fetch_showdownbot.py  # Showdown Bot 2004/2005 cards, 2025 + 2026 seasons
 python scripts/value_report.py       # chart-based values (~2.5 minutes)

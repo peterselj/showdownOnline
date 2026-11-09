@@ -11,7 +11,8 @@ players, like marvelsnapzone.com), plus why (Speed, catcher arm, glove, points).
 ## Done
 - **showdown2000.fun results** (`showdown/sd2000.py`, `scripts/build_sd2000.py`, `explorer/sd2000.html`):
   1,093 hitters + 811 pitchers (versions merged) valued from real games across 1,261 teams; published explorer
-  https://claude.ai/artifact/EfvbFLfN1pzo8ZsrhbqawU. Findings are in README.md.
+  https://peterselj.github.io/showdown2000analysis/ (repo peterselj/showdown2000analysis;
+  update with build_sd2000.py then publish_site.py). Findings are in README.md.
 - **Engine** (`showdown/engine.py`): exact Markov solver with steals (catcher arm vs Speed, 3rd +5
   harder), extra bases (+5 home, +5 with 2 outs), double plays, optimal offense choices, and a
   "tagged" runner so one batter's Speed follows him around the bases. Dice-simulator tests agree.
