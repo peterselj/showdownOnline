@@ -20,8 +20,10 @@ and read off what each result is worth in runs in that league - singles, walks, 
 stolen bases, caught stealing, double plays. A card's runs above average is then its own
 results times those values, compared with an average card over the same plate appearances.
 
-Small samples are noisy, so each card's rate is shrunk toward average: a card with PA plate
-appearances keeps PA / (PA + SHRINK_PA) of its difference from average.
+A card's results are trusted only as far as they can be. Each card is pulled toward what cards
+at its price usually do (see shrink_to_price): a card keeps more of its own results the more plate
+appearances it has AND the more teams they come from, because one team's situation (who it plays,
+how it plays) moves a card's numbers about twice as much as real differences between cards do.
 """
 from __future__ import annotations
 
@@ -232,7 +234,7 @@ def value_batting(bat: pd.DataFrame, rv: dict) -> pd.DataFrame:
     lg_per_pa = runs.sum() / df["PA"].sum()          # average card, same plate appearances
     df["game_runs"] = runs - lg_per_pa * df["PA"]
     df["raa_pa"] = df["game_runs"] / df["PA"]
-    df["raa_pa_shrunk"] = df["raa_pa"] * df["PA"] / (df["PA"] + SHRINK_PA)
+    df["raa_pa_shrunk"] = df["raa_pa"] * df["PA"] / (df["PA"] + SHRINK_PA)   # replaced by shrink_to_price in the build
     df["raa_per_game"] = df["raa_pa_shrunk"] * rv["pa_per_inning"]   # one lineup slot, 9 innings
     df["running_runs"] = df["SB"] * rv["SB"] + df["CS"] * rv["CS"]
     df["obp"] = (df["H"] + df["BB"]) / (df["AB"] + df["BB"] + df["SF"]).replace(0, np.nan)
@@ -240,6 +242,42 @@ def value_batting(bat: pd.DataFrame, rv: dict) -> pd.DataFrame:
     df["sb_per_game"] = df["SB"] / df["G"]
     df["dp_per_pa"] = df["DP"] / df["PA"]
     return df
+
+
+def per_pa_variance(env: Env, rv: dict) -> float:
+    """Variance of one plate appearance's run value in this league (the dice noise per PA)."""
+    p = np.asarray(env.probs, float)
+    v = np.array([rv[e] for e in EVENTS])
+    return float(p @ (v - p @ v) ** 2)
+
+
+def shrink_to_price(rate: np.ndarray, n: np.ndarray, teams: np.ndarray, points: np.ndarray,
+                    noise_var: float) -> dict:
+    """Pull each card's rate (runs per PA or per batter faced) toward what cards at its price do.
+
+    A card's observed rate = what its price predicts + its real edge + its teams' situation + dice
+    noise. With `n` chances spread over `teams` teams:
+        dice noise variance     noise_var / n
+        team situation          team_var / teams      (one team's opponents and habits)
+        real edge               talent_var
+    talent_var and team_var are measured from all cards at once: how much more cards differ from
+    the price line than dice noise alone explains, and how that extra spread shrinks as the number
+    of teams grows. Each card then keeps  weight = talent_var / (talent_var + team_var/teams +
+    noise_var/n)  of its difference from the price line.
+    """
+    rate, n, teams, points = (np.asarray(a, float) for a in (rate, n, teams, points))
+    w = n
+    X = np.vstack([np.ones_like(points), points]).T
+    beta = np.linalg.lstsq(X * np.sqrt(w)[:, None], rate * np.sqrt(w), rcond=None)[0]
+    prior = X @ beta
+    resid = rate - prior
+    excess = resid ** 2 - noise_var / n
+    Z = np.vstack([np.ones_like(teams), 1 / teams]).T
+    talent_var, team_var = np.linalg.lstsq(Z * np.sqrt(w)[:, None], excess * np.sqrt(w), rcond=None)[0]
+    talent_var, team_var = max(float(talent_var), 1e-7), max(float(team_var), 0.0)
+    weight = talent_var / (talent_var + team_var / teams + noise_var / n)
+    return {"shrunk": prior + weight * resid, "weight": weight, "prior": prior,
+            "talent_sd": talent_var ** 0.5, "team_sd": team_var ** 0.5}
 
 
 def _speed_shares(speeds: pd.Series, weights: pd.Series) -> pd.Series:

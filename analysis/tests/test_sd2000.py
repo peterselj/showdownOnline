@@ -134,3 +134,21 @@ def test_value_pitching_outs_from_decimal_innings():
     out = sd2000.value_pitching(pit, rv)
     assert out.loc[0, "BF"] == 157 + 40 + 15             # 52.3 innings = 157 outs
     assert out.loc[0, "runs_saved_per_9"] > 0 > out.loc[1, "runs_saved_per_9"]
+
+
+def test_shrink_to_price_trusts_more_teams_and_finds_the_spreads():
+    rng = np.random.default_rng(5)
+    n_cards = 4000
+    points = rng.uniform(50, 600, n_cards)
+    teams = rng.choice([1, 2, 5, 10, 30], n_cards)
+    pa = rng.choice([300, 1000, 3000], n_cards)
+    talent_sd, team_sd, noise_var = 0.017, 0.035, 0.25
+    rate = (-0.08 + 0.0003 * points + rng.normal(0, talent_sd, n_cards)
+            + rng.normal(0, team_sd / np.sqrt(teams)) + rng.normal(0, np.sqrt(noise_var / pa)))
+    out = sd2000.shrink_to_price(rate, pa, teams, points, noise_var)
+    assert out["talent_sd"] == pytest.approx(talent_sd, rel=0.2)
+    assert out["team_sd"] == pytest.approx(team_sd, rel=0.2)
+    w = pd.Series(out["weight"])
+    one = w[(teams == 1) & (pa == 1000)].mean()
+    many = w[(teams == 30) & (pa == 1000)].mean()
+    assert one < 0.3 < many                              # one team's results count far less

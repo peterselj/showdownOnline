@@ -44,16 +44,23 @@ python scripts/build_explorer.py     # chart-based card grid -> results/card-exp
 Read on 2026-11-07: 1,093 hitter cards and 811 pitcher cards with real playing time (after
 merging versions of the same card), from 1,261 teams (48 farm/test teams left out). A card's line
 is pooled from every team that used it for at least 80 at-bats or 23 innings, and only cards with
-150+ plate appearances (or batters faced) are kept. Small samples are pulled toward average.
+150+ plate appearances (or batters faced) are kept. Each card's results are trusted only as
+far as they can be (see "How much a card's own results count").
 
-- **Prices are mostly fair.** Points vs value from real games: correlation 0.84 for hitters
-  (500+ PA), 0.74 for starters, 0.64 for relievers. Pitcher prices are the looser ones.
+- **Prices are mostly fair.** For hitter cards used by 10+ teams, price and real runs per
+  plate appearance correlate at 0.93. Pitcher prices are looser.
+- **One team's results can't be trusted alone.** Who a team plays and how it plays moves a
+  card's numbers about twice as much as real differences between cards (team situation spread
+  0.035 runs per PA vs 0.017 for the cards themselves). The 2012 A-Rod's .489 OBP came from one
+  team, 7 sampling standard deviations above what On-Base 8 cards do; it now counts 15%.
 - **Very fast runners are the clearest hitter bargain.** Speed 24+ cards beat their price by
   about +0.08 runs a game and steal about 0.8 bases a game. A steal of 2nd is worth +0.17 runs
   and caught stealing -0.49, so stealing 2nd pays only at about 75% success or better.
 - **Catcher arm: below +8 hurts; +12 and up is worth having.** Compared with the league's real
   mix of catchers: +3 costs 0.29 runs a game, +5 0.14, +8 0.05; +12 gains 0.05 and +14 0.07.
-  Weak-armed catchers (+7 or less) average -0.17 runs a game vs price; +12s and up +0.03.
+  Catchers carry no price premium (about +6 points vs a non-catcher with the same bat), but
+  the price ignores the arm: a +5 costs about what a +12 does for the same bat. So weak-armed
+  catchers are the worst bargains (Langeliers C+2, Diaz C+5) and +12s are hidden bonuses.
 - **The most-used cards are cheap filler.** Austin Hedges 2025 (C+12, 80 pts) is on 81 teams;
   Patrick Bailey and Luis Torrens (+12 catchers) and 40-point Josh Rojas follow, and 40-point
   starter Jordan Montgomery is on 85 teams. Their bats are well below average; teams use them
@@ -64,6 +71,21 @@ is pooled from every team that used it for at least 80 at-bats or 23 innings, an
 - **Control 5-6 relievers are bargains** (+0.31 runs per 9 vs price; Control 4 or less -0.58).
 
 `python scripts/build_sd2000.py` recomputes these lines from the data and puts them on the page.
+
+### How much a card's own results count
+
+A card's observed runs per plate appearance = what its price predicts + its real edge + its
+teams' situation + dice noise. Measured across all cards at once: dice noise is 0.254 (runs per
+PA)^2 divided by plate appearances; one team's situation adds 0.035 runs per PA of spread,
+divided down by the square root of the number of teams; real edges between cards at the same
+price are about 0.017. Each card keeps
+
+    weight = edge^2 / (edge^2 + team^2 / teams + noise / PA)
+
+of its difference from the price line, and the page shows that weight as "own results count".
+A one-team card with 650 PA keeps about 15%; a card with 2,000+ PA across 8+ teams about half;
+Bonds 1989 (7,531 PA, 22 teams) 76%. Pitchers work the same way (by batters faced), with
+separate price lines for starters and relievers. The page also has a minimum-teams filter.
 
 ### How fielding is valued
 

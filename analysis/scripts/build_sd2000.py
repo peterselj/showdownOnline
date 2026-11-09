@@ -60,9 +60,13 @@ def make_findings(hb: pd.DataFrame, pv: pd.DataFrame, rv: dict, tables: dict, st
     """Plain-language headline results, recomputed from the data on every build."""
     out = []
     big = hb[hb["PA"] >= 500]
-    r = np.corrcoef(big["points"], big["value"])[0, 1]
-    out.append(f"Points predict real value fairly well for hitters (correlation {r:.2f} across {len(big)} cards "
-               f"with 500+ plate appearances), so the price is usually fair and the bargains are the exceptions.")
+    wide = hb[hb["teams"] >= 10]
+    r = np.corrcoef(wide["points"], wide["raa_pa"])[0, 1]
+    out.append(f"Points predict real results well: for the {len(wide)} hitter cards used by 10+ teams, price and "
+               f"real runs per plate appearance correlate at {r:.2f}. One team's results are another matter: who a team "
+               f"plays and how it plays moves a card's numbers about twice as much as real differences between cards, "
+               f"so a card used by one or two teams is mostly pulled back to its price (each card shows how much its "
+               f"own results count).")
 
     fast, rest = big[big["speed"] >= 24], big[big["speed"] < 24]
     if len(fast):
@@ -84,6 +88,18 @@ def make_findings(hb: pd.DataFrame, pv: pd.DataFrame, rv: dict, tables: dict, st
                    f"catcher at all, the spread would be wider (+5 {f[5]:+.2f}, +14 {f[14]:+.2f}); the truth is in between. "
                    f"Weak-armed catchers ({len(weak)} cards) average {weak['surplus'].mean():+.2f} vs price; "
                    f"+12 and up ({len(strong)}) {strong['surplus'].mean():+.2f}.")
+
+    if len(cat):
+        X = np.vstack([np.ones(len(hb)), hb["raa_per_game"], (hb["primary_spot"] == "C").astype(float)]).T
+        coef = np.linalg.lstsq(X * np.sqrt(hb["trust"].to_numpy())[:, None],
+                               hb["points"].to_numpy() * np.sqrt(hb["trust"].to_numpy()), rcond=None)[0]
+        out.append(f"Catchers aren't priced at a premium (about {coef[2]:+.0f} points vs a non-catcher with the same bat), "
+                   f"but their arm isn't priced at all: a +5 catcher costs about what a +12 does for the same bat. So a "
+                   f"weak arm is an unpriced liability and a +12 a hidden bonus, which is why the worst bargains "
+                   f"include weak-armed catchers like "
+                   + " and ".join(f"{n} ({pos.split(',')[0]})" for n, pos in
+                                  hb[hb["primary_spot"] == "C"].nsmallest(2, "surplus")[["name", "positions"]].values)
+                   + ".")
 
     top = hb[hb["points"] <= 150].nlargest(4, "teams")
     names = ", ".join(f"{n} ({p} pts, {t} teams)" for n, p, t in zip(top["name"], top["points"], top["teams"]))
@@ -125,6 +141,11 @@ def main() -> None:
 
     # ---- hitters: game results + modelled glove ----
     hb = sd2000.value_batting(bat, rv)
+    noise = sd2000.per_pa_variance(env, rv)
+    sh = sd2000.shrink_to_price(hb["raa_pa"], hb["PA"], hb["teams"], hb["points"], noise)
+    hb["raa_pa_shrunk"], hb["trust"] = sh["shrunk"], sh["weight"]
+    hb["raa_per_game"] = hb["raa_pa_shrunk"] * rv["pa_per_inning"]
+    print(f"Hitters: real edge sd {sh['talent_sd']:.4f} runs/PA, one team's situation sd {sh['team_sd']:.4f}")
     spot_avg = sd2000.spot_averages(hb)
     tables = sd2000.team_glove_tables(env, hb, spot_avg)
     steals = sd2000.steal_model(hb, rv, rv["pa_per_inning"] * 9)
@@ -134,14 +155,19 @@ def main() -> None:
     hb["primary_spot"] = hb["positions"].map(first_spot)
     hb["glove_primary"] = [g.get(s, 0.0) if s else 0.0 for g, s in zip(hb["glove"], hb["primary_spot"])]
     hb["value"] = hb["raa_per_game"] + hb["glove_primary"]
-    hb["weight"] = hb["PA"] / (hb["PA"] + sd2000.SHRINK_PA)
+    hb["weight"] = hb["trust"]
     hfit = fit(hb, "value")
     hb["surplus"] = hb["value"] - (hfit["intercept"] + hfit["slope"] * hb["points"])
 
     # ---- pitchers ----
     pv = sd2000.value_pitching(pit, rv)
     pv["staff"] = np.where(pv["role"] == "Starter", "SP", "RP")
-    pv["weight"] = pv["BF"] / (pv["BF"] + sd2000.SHRINK_BF)
+    for staff, g in pv.groupby("staff"):          # starters and relievers have separate price lines
+        psh = sd2000.shrink_to_price(-g["runs_vs_avg"] / g["BF"], g["BF"], g["teams"], g["points"], noise)
+        pv.loc[g.index, "trust"] = psh["weight"]
+        pv.loc[g.index, "runs_saved_per_9"] = psh["shrunk"] * rv["pa_per_inning"] * 9
+        print(f"{staff}: real edge sd {psh['talent_sd']:.4f} runs/BF, one team's situation sd {psh['team_sd']:.4f}")
+    pv["weight"] = pv["trust"]
     pfits = {}
     pv["surplus"] = np.nan
     for staff, g in pv.groupby("staff"):
@@ -162,7 +188,7 @@ def main() -> None:
         "cs": int(x["CS"]), "dp": int(x["DP"]), "bb": int(x["BB"]), "so": int(x["SO"]),
         "obp": r(x["obp"], 3), "slg": r(x["slg"], 3), "bat": r(x["raa_per_game"]), "run": r(x["running_runs"] / max(x["G"], 1)),
         "gl": {k: r(v) for k, v in x["glove"].items()}, "v": r(x["value"]), "s": r(x["surplus"]),
-        "ver": x["versions"], "pr": x["points_range"], "img": card_images(x, "HITTER"),
+        "ver": x["versions"], "pr": x["points_range"], "img": card_images(x, "HITTER"), "tr": r(x["trust"], 2),
     } for _, x in hb.iterrows()]
     pitchers = [{
         "n": x["name"], "y": int(x["year"]), "t": x["team"], "p": int(x["points"]), "ctl": int(x["command"]),
@@ -170,7 +196,7 @@ def main() -> None:
         "g": int(x["G"]), "gs": int(x["GS"]), "ipt": r(x["IP"], 1), "era": r(x["era"], 2),
         "whip": r((x["H"] + x["BB"]) / x["IP"] if x["IP"] else np.nan, 3), "k9": r(x["SO"] * 9 / x["IP"] if x["IP"] else np.nan, 2),
         "bf": int(x["BF"]), "v": r(x["runs_saved_per_9"]), "s": r(x["surplus"]),
-        "ver": x["versions"], "pr": x["points_range"], "img": card_images(x, "PITCHER"),
+        "ver": x["versions"], "pr": x["points_range"], "img": card_images(x, "PITCHER"), "tr": r(x["trust"], 2),
     } for _, x in pv.iterrows()]
     findings = make_findings(hb, pv, rv, tables, steals, gb_share)
     for f in findings:

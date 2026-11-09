@@ -155,6 +155,7 @@ footer p { margin: 0; }
     <div class="ctl"><span class="lbl">Position</span><div class="chips" id="chips" role="group" aria-label="Position"></div></div>
     <div class="ctl"><label for="sort">Sort</label><select id="sort"></select></div>
     <div class="ctl"><label for="minpa" class="lbl" id="minlbl">Min PA</label><select id="minpa"></select></div>
+    <div class="ctl"><label for="minteams" class="lbl">Min teams</label><select id="minteams"><option value="1">Any</option><option value="2">2</option><option value="5">5</option><option value="10">10</option><option value="20">20</option></select></div>
     <div class="ctl search"><label for="q" class="lbl">Find</label><input id="q" type="search" placeholder="Player name" autocomplete="off"></div>
   </div>
 </div>
@@ -204,7 +205,7 @@ const SORTS = {
   k9: { label: "K / 9", fn: (a, b) => (b.k9 ?? 0) - (a.k9 ?? 0), p: true },
 };
 
-let state = { group: "All", sort: "bargain", q: "", min: 500 };
+let state = { group: "All", sort: "bargain", q: "", min: 500, minTeams: 1 };
 try { Object.assign(state, JSON.parse(localStorage.getItem("sd2000-results-v2") || "{}")); } catch (e) {}
 const save = () => { try { localStorage.setItem("sd2000-results-v2", JSON.stringify(state)); } catch (e) {} };
 const PAGE = 60;
@@ -246,7 +247,7 @@ function members() {
     } else { c.glv = c.grp === "H" ? (c.gl[c.posList[0]?.pos] ?? 0) : null; c.v_ = c.v; }
     c.s_ = c.v_ - (fit.intercept + fit.slope * c.p);
   }
-  return list.filter((c) => c[minKey] >= state.min);
+  return list.filter((c) => c[minKey] >= state.min && c.tm >= (state.minTeams || 1));
 }
 
 const unit = () => isPitch() ? "runs saved / 9" : "runs / game";
@@ -281,7 +282,7 @@ function tile(c, idx) {
     </div>
     <div class="attrs">${attrs}</div>
     ${versHtml}
-    <div class="usage"><div class="k">Used by <b>${c.tm}</b> team${c.tm === 1 ? "" : "s"} · ${c.g.toLocaleString()} G</div><div class="bar-u" aria-hidden="true"><i style="width:${(use * 100).toFixed(1)}%"></i></div></div>
+    <div class="usage"><div class="k">Used by <b>${c.tm}</b> team${c.tm === 1 ? "" : "s"} · ${c.g.toLocaleString()} G${c.tr != null ? ` · <span title="How much this card's own results count; the rest is what cards at its price usually do. More plate appearances and more teams mean more trust.">own results count ${Math.round(c.tr * 100)}%</span>` : ""}</div><div class="bar-u" aria-hidden="true"><i style="width:${(use * 100).toFixed(1)}%"></i></div></div>
     <div class="line">${line}</div>
     ${split}
     <div class="stats">
@@ -337,7 +338,7 @@ function render() {
   list = [...list].sort(SORTS[sorter].fn);
   renderScatter(list);
   $("g-title").textContent = `${list.length} ${NAMES[state.group]}`;
-  $("g-note").textContent = `${SORTS[sorter].label}. At least ${state.min} ${isPitch() ? "batters faced" : "plate appearances"}.`;
+  $("g-note").textContent = `${SORTS[sorter].label}. At least ${state.min} ${isPitch() ? "batters faced" : "plate appearances"}${state.minTeams > 1 ? ` and ${state.minTeams} teams` : ""}.`;
   $("grid").innerHTML = list.length ? list.slice(0, shown).map(tile).join("") : `<div class="empty">No ${NAMES[state.group]} match.</div>`;
   $("more").hidden = list.length <= shown;
   $("more").textContent = `Show ${Math.min(PAGE, list.length - shown)} more`;
@@ -350,6 +351,7 @@ function render() {
   $("minlbl").textContent = isPitch() ? "Min BF" : "Min PA";
   $("minpa").innerHTML = (isPitch() ? MIN_BF : MIN_PA).map((v) => `<option value="${v}">${v || "Any"}</option>`).join("");
   $("minpa").value = String(state.min);
+  $("minteams").value = String(state.minTeams || 1);
 }
 
 function init() {
@@ -365,7 +367,7 @@ function init() {
     ["A +0 shortstop costs", `${sign(((M.glove_tables || {}).SS || {})["0"] ?? 0, 2)}`, `runs / game vs an average one; +0 in center ${sign(((M.glove_tables || {}).CF || {})["0"] ?? 0, 2)}`],
   ].map(([k, v, u]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`).join("");
   $("findings").innerHTML = (M.findings || []).map((f) => `<li>${esc(f)}</li>`).join("");
-  $("caveat").textContent = `Stats come from showdown2000.fun's Leaders tables, read ${M.collected || "recently"}, pooled across every team that played each card${M.clean ? `; ${M.flagged_note || "flagged teams are left out"}` : ""}. Only teams with at least ${M.min_ab ?? 40} at-bats (hitters) or ${M.min_ip ?? 10} innings (pitchers) with a card count. Small samples are pulled toward average, so a card needs a few hundred plate appearances before its number means much. The glove part is modeled, since the Leaders tables have no fielding stats. Infield and outfield gloves are priced by what they do to the team total that double plays and throws on the bases are rolled against (the model's double-play rate is matched to the real one). Catcher arms are priced from every real steal attempt, assuming runners only go when the steal pays. Versions of a card that print the same numbers are merged; click a name to open the card. Pitching value uses hits, walks, strikeouts and home runs allowed.`;
+  $("caveat").textContent = `Stats come from showdown2000.fun's Leaders tables, read ${M.collected || "recently"}, pooled across every team that played each card${M.clean ? `; ${M.flagged_note || "flagged teams are left out"}` : ""}. Only teams with at least ${M.min_ab ?? 40} at-bats (hitters) or ${M.min_ip ?? 10} innings (pitchers) with a card count. Each card is pulled toward what cards at its price usually do, and keeps more of its own results the more plate appearances and teams it has: one team's situation moves a card's numbers about twice as much as real differences between cards. Each card shows how much its own results count. The glove part is modeled, since the Leaders tables have no fielding stats. Infield and outfield gloves are priced by what they do to the team total that double plays and throws on the bases are rolled against (the model's double-play rate is matched to the real one). Catcher arms are priced from every real steal attempt, assuming runners only go when the steal pays. Versions of a card that print the same numbers are merged; click a name to open the card. Pitching value uses hits, walks, strikeouts and home runs allowed.`;
   $("foot").innerHTML = `<p>Run values come from the exact game engine, solved for a league built from these games' totals with showdown2000.fun's rules (steals, extra bases, +5 going home and with two outs, stealing 3rd 5 harder). One result is worth: single ${sign(rv["1B"], 2)}, double ${sign(rv["2B"], 2)}, homer ${sign(rv.HR, 2)}, walk ${sign(rv.BB, 2)}, out ${sign(rv.OUT, 2)}, double play ${sign(rv.DP, 2)} extra.</p><p>Bargain = value minus the straight-line fit of value on points within hitters, starters or relievers, weighted by sample size. Tiers: S top 5%, A next 15%, B next 30%, C next 30%, D bottom 20%.</p>`;
   $("chips").innerHTML = HITTER_CHIPS.map((g) => `<button class="chip" data-g="${g}">${g === "All" ? "All hitters" : g}</button>`).join("")
     + ["SP", "RP"].map((g, i) => `<button class="chip${i === 0 ? " sep" : ""}" data-g="${g}">${g}</button>`).join("");
@@ -373,6 +375,7 @@ function init() {
   $("q").value = state.q;
   $("sort").onchange = (e) => { state.sort = e.target.value; shown = PAGE; save(); render(); };
   $("minpa").onchange = (e) => { state.min = +e.target.value; shown = PAGE; save(); render(); };
+  $("minteams").onchange = (e) => { state.minTeams = +e.target.value; shown = PAGE; save(); render(); };
   $("q").oninput = (e) => { state.q = e.target.value.trim(); shown = PAGE; save(); render(); };
   $("chips").onclick = (e) => { const b = e.target.closest(".chip"); if (!b) return; state.group = b.dataset.g; shown = PAGE; save(); render(); };
   $("more").onclick = () => { shown += PAGE; render(); };
